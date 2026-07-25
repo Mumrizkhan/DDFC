@@ -1,0 +1,95 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "build",
+      "command": "dotnet",
+      "type": "process",
+      "args": [
+        "build",
+        "${workspaceFolder}/src/DDFC.API/DDFC.API.csproj",
+        "/property:GenerateFullPaths=true",
+        "/consoleloggerparameters:NoSummary;ForceNoAlign"
+      ],
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "publish",
+      "command": "dotnet",
+      "type": "process",
+      "args": [
+        "publish",
+        "${workspaceFolder}/src/DDFC.API/DDFC.API.csproj",
+        "/property:GenerateFullPaths=true",
+        "/consoleloggerparameters:NoSummary;ForceNoAlign"
+      ],
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "watch",
+      "command": "dotnet",
+      "type": "process",
+      "args": [
+        "watch",
+        "run",
+        "--project",
+        "${workspaceFolder}/src/DDFC.API/DDFC.API.csproj"
+      ],
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "clean",
+      "command": "dotnet",
+      "type": "process",
+      "args": [
+        "clean",
+        "${workspaceFolder}/src/DDFC.API/DDFC.API.csproj"
+      ],
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "restore",
+      "command": "dotnet",
+      "type": "process",
+      "args": [
+        "restore",
+        "${workspaceFolder}/src/DDFC.API/DDFC.API.csproj"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "ef-update-ddfc",
+      "command": "dotnet",
+      "type": "process",
+      "args": [
+        "ef",
+        "database",
+        "update",
+        "--context",
+        "DDFCDbContext",
+        "--project",
+        "${workspaceFolder}/src/DDFC.Infrastructure/DDFC.Infrastructure.csproj",
+        "--startup-project",
+        "${workspaceFolder}/src/DDFC.API/DDFC.API.csproj"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "ef-update-workflow",
+      "command": "dotnet",
+      "type": "process",
+      "args": [
+        "ef",
+        "database",
+        "update",
+        "--context",
+        "WorkflowDbContext",
+        "--project",
+        "${workspaceFolder}/src/DDFC.Infrastructure/DDFC.Infrastructure.csproj",
+        "--startup-project",
+        "${workspaceFolder}/src/DDFC.API/DDFC.API.csproj"
+      ],
+      "problemMatcher": []
+    }
+  ]
+}

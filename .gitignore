@@ -1,0 +1,21 @@
+# Visual Studio
+.vs/
+*.user
+*.suo
+
+# Build outputs
+**/bin/
+**/obj/
+
+# Node / Frontend
+**/node_modules/
+**/dist/
+**/.env.local
+
+# EF migrations snapshots are committed, but skip lock files
+*.db-shm
+*.db-wal
+
+# OS
+Thumbs.db
+.DS_Store

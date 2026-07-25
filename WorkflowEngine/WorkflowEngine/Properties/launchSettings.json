@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "WorkflowEngine": {
+      "commandName": "Project"
+    },
+    "Container (Dockerfile)": {
+      "commandName": "Docker"
+    }
+  }
+}

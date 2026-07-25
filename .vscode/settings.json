@@ -1,0 +1,10 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "N": true,
+        "Get-Item": true,
+        "/^Set-Location \"c:\\\\Workspace\\\\DDFC\\\\DDFC\\\\frontend\\\\src\\\\layouts\" ; node -e \"const path = require\\('path'\\); console\\.log\\(path\\.resolve\\('\\.\\./\\.\\./store/hooks'\\)\\);\"$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
+}
