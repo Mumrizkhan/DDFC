@@ -422,10 +422,17 @@ export const TaskDetailPage: React.FC = () => {
 
       {activeTab === 'Actions' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* Admin Review Panel in Actions tab — Possession Admin only (Admin is superadmin, not a workflow participant) */}
+          {req.status === 'Submitted' && staffUser?.roleName === 'Possession Admin' && (
+            <div className="lg:col-span-2">
+              <AdminReviewPanel request={req} requestId={req.id} />
+            </div>
+          )}
+
           <Card title="Workflow Actions">
             <div className="space-y-3">
               {/* Submitted — Initiate or Reject (Reception Officer only) */}
-              {req.status === 'Submitted' && (dept.toLowerCase().includes('reception') || dept.toLowerCase().includes('front desk')) && (
+              {req.status === 'Submitted' && (staffUser?.roleName === 'Reception Officer' || dept.toLowerCase().includes('reception') || dept.toLowerCase().includes('front desk')) && (
                 <>
                   <Button
                     variant="primary"

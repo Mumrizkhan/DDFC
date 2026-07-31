@@ -35,6 +35,7 @@ public class PossessionRequest : BaseEntity
     public string? AuthorizedPersonPhone { get; set; }
 
     public PossessionRequestStatus Status { get; set; } = PossessionRequestStatus.Submitted;
+    public RequestType RequestType { get; set; } = RequestType.PossessionDesign;
     public DateTime SubmittedAt { get; set; } = DateTime.UtcNow;
 
     // Parallel branch flags

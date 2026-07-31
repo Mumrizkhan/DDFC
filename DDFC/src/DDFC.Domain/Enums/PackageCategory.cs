@@ -4,5 +4,7 @@ public enum PackageCategory
 {
     HouseDesign,
     InteriorDesign,
-    Supervision
+    Supervision,
+    RevisedPlan,
+    AsBuiltPlan,
 }

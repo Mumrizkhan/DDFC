@@ -212,7 +212,7 @@ public class AdminController : ControllerBase
 
     // ── Customers ──────────────────────────────────────────────────────────────
     [HttpGet("customers")]
-    [Authorize(Policy = "CanManageCustomers")]
+    [Authorize]
     public async Task<IActionResult> GetCustomers() =>
         Ok(await _db.Customers
             .Where(c => !c.IsDeleted)
@@ -357,7 +357,7 @@ public class AdminController : ControllerBase
 
     // ── Departments ────────────────────────────────────────────────────────────
     [HttpGet("departments")]
-    [Authorize(Policy = "StaffOrAdmin")]
+    [Authorize]
     public async Task<IActionResult> GetDepartments() =>
         Ok(await _db.Departments.Include(d => d.Users).ToListAsync());
 

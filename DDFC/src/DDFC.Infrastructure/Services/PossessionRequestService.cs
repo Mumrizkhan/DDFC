@@ -16,6 +16,12 @@ public class PossessionRequestService : IPossessionRequestService
     private readonly ILogger<PossessionRequestService> _logger;
 
     private static Guid _ddFCProcessId = Guid.Empty;
+    private static Guid _revisedPlanProcessId = Guid.Empty;
+    private static Guid _asBuiltPlanProcessId = Guid.Empty;
+
+    public static void SetDDFCProcessId(Guid id)         => _ddFCProcessId         = id;
+    public static void SetRevisedPlanProcessId(Guid id)  => _revisedPlanProcessId  = id;
+    public static void SetAsBuiltPlanProcessId(Guid id)  => _asBuiltPlanProcessId  = id;
 
     public PossessionRequestService(
         DDFCDbContext db,
@@ -28,14 +34,23 @@ public class PossessionRequestService : IPossessionRequestService
     }
 
     // -----------------------------------------------------------------------
-    // Helper: generate Request ID like DDFC-2026-00001
+    // Helper: generate Request ID with prefix based on workflow type
+    //   PossessionDesign → DDFC-YYYY-NNNNN
+    //   RevisedPlan      → RPLAN-YYYY-NNNNN
+    //   AsBuiltPlan      → ASBUILT-YYYY-NNNNN
     // -----------------------------------------------------------------------
-    private async Task<string> GenerateRequestIdAsync()
+    private async Task<string> GenerateRequestIdAsync(RequestType requestType = RequestType.PossessionDesign)
     {
-        var year = DateTime.UtcNow.Year;
+        var year   = DateTime.UtcNow.Year;
+        var prefix = requestType switch
+        {
+            RequestType.RevisedPlan => "RPLAN",
+            RequestType.AsBuiltPlan => "ASBUILT",
+            _                       => "DDFC",
+        };
         var count = await _db.PossessionRequests
-            .CountAsync(r => r.CreatedAt.Year == year);
-        return $"DDFC-{year}-{(count + 1):D5}";
+            .CountAsync(r => r.RequestType == requestType && r.CreatedAt.Year == year);
+        return $"{prefix}-{year}-{(count + 1):D5}";
     }
 
     // -----------------------------------------------------------------------
@@ -54,14 +69,12 @@ public class PossessionRequestService : IPossessionRequestService
             "DDFC Process ID not set. Call SetDDFCProcessId() on startup after seeding.");
     }
 
-    public static void SetDDFCProcessId(Guid id) => _ddFCProcessId = id;
-
     // -----------------------------------------------------------------------
     // Create
     // -----------------------------------------------------------------------
     public async Task<PossessionRequest> CreateRequestAsync(CreateRequestDto dto, Guid? createdByUserId = null)
     {
-        var requestId = await GenerateRequestIdAsync();
+        var requestId = await GenerateRequestIdAsync(dto.RequestType);
 
         var req = new PossessionRequest
         {
@@ -75,15 +88,52 @@ public class PossessionRequestService : IPossessionRequestService
             GuardianName = dto.GuardianName,
             GuardianRelation = dto.GuardianRelation,
             Contractor = dto.Contractor,
+            RequestType = dto.RequestType,
             Status = PossessionRequestStatus.Submitted
         };
 
         _db.PossessionRequests.Add(req);
         await _db.SaveChangesAsync();
 
-        // Start WorkflowEngine request
-        var weRequest = await _workflowEngine.StartRequestAsync(_ddFCProcessId);
+        // Start WorkflowEngine request using the correct process for this workflow type
+        var processId = dto.RequestType switch
+        {
+            RequestType.RevisedPlan => _revisedPlanProcessId,
+            RequestType.AsBuiltPlan => _asBuiltPlanProcessId,
+            _                       => _ddFCProcessId,
+        };
+        var weRequest = await _workflowEngine.StartRequestAsync(processId);
         req.WorkflowRequestId = weRequest.Id;
+        await _db.SaveChangesAsync();
+
+        // Auto-select package from linked possession request (Revised/AsBuilt workflows)
+        if (dto.LinkedPossessionRequestId.HasValue &&
+            (dto.RequestType == RequestType.RevisedPlan || dto.RequestType == RequestType.AsBuiltPlan))
+        {
+            var linkedReq = await _db.PossessionRequests
+                .Include(r => r.SelectedPackage)
+                .Include(r => r.Plot)
+                .FirstOrDefaultAsync(r => r.Id == dto.LinkedPossessionRequestId.Value);
+
+            if (linkedReq?.SelectedPackage != null)
+            {
+                var targetCategory = dto.RequestType == RequestType.RevisedPlan
+                    ? PackageCategory.RevisedPlan
+                    : PackageCategory.AsBuiltPlan;
+
+                // Match by plot size and design type from the linked possession package
+                var matchedPkg = await _db.Packages
+                    .FirstOrDefaultAsync(p =>
+                        p.PackageCategory == targetCategory &&
+                        p.PlotSize        == linkedReq.SelectedPackage.PlotSize &&
+                        p.DesignType      == linkedReq.SelectedPackage.DesignType &&
+                        p.IsActive);
+
+                if (matchedPkg != null)
+                    req.SelectedPackageId = matchedPkg.Id;
+            }
+        }
+
         await _db.SaveChangesAsync();
 
         await LogHistoryAsync(req.Id, null, "Submitted", "CreateRequest", createdByUserId, null);
@@ -887,9 +937,44 @@ public class PossessionRequestService : IPossessionRequestService
                 "Admin Review – Initiate",
                 userId.ToString(), null);
 
-            req.Status = PossessionRequestStatus.Initiated;
-            await _db.SaveChangesAsync();
-            await LogHistoryAsync(req.Id, "Submitted", "Initiated", "AdminReview-Initiate", userId, null);
+            // For Revised/AsBuilt workflows with a pre-selected package, auto-advance
+            // the Package Selection step so the workflow lands on Payment Confirmation.
+            if (req.SelectedPackageId.HasValue &&
+                (req.RequestType == RequestType.RevisedPlan || req.RequestType == RequestType.AsBuiltPlan))
+            {
+                await AdvanceWorkflowStepAsync(req,
+                    "Reception – Package Selection",
+                    "Select Design Package",
+                    userId.ToString(), null);
+
+                // Create the pending payment record (mirrors SelectPackageAsync logic)
+                var pkg = await _db.Packages
+                    .Include(p => p.LineItems)
+                    .FirstOrDefaultAsync(p => p.Id == req.SelectedPackageId);
+
+                if (pkg != null && !await _db.Payments.AnyAsync(p => p.RequestId == req.Id))
+                {
+                    var totalAmount = pkg.LineItems.Where(li => !li.IsFree).Sum(li => li.AmountDDFC);
+                    var challanNo = $"CHN-{DateTime.UtcNow.Year}-{Guid.NewGuid().ToString()[..6].ToUpper()}";
+                    _db.Payments.Add(new Payment
+                    {
+                        RequestId   = req.Id,
+                        ChallanNo   = challanNo,
+                        TotalAmount = totalAmount,
+                        Status      = PaymentStatus.Pending,
+                    });
+                }
+
+                req.Status = PossessionRequestStatus.PackageSelected;
+                await _db.SaveChangesAsync();
+                await LogHistoryAsync(req.Id, "Submitted", "PackageSelected", "AdminReview-AutoPackage", userId, null);
+            }
+            else
+            {
+                req.Status = PossessionRequestStatus.Initiated;
+                await _db.SaveChangesAsync();
+                await LogHistoryAsync(req.Id, "Submitted", "Initiated", "AdminReview-Initiate", userId, null);
+            }
             return req;
         }
 

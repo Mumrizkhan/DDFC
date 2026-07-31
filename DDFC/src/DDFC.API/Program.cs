@@ -339,9 +339,13 @@ using (var scope = app.Services.CreateScope())
     var roleManager   = scope.ServiceProvider.GetRequiredService<RoleManager<Role>>();
     await DDFCDataSeeder.SeedAsync(ddfc, userManager, roleManager);
 
-    var processId = await DDFCWorkflowSeeder.SeedAsync(scope.ServiceProvider);
+    var processId            = await DDFCWorkflowSeeder.SeedAsync(scope.ServiceProvider);
+    var revisedPlanProcessId = await RevisedPlanWorkflowSeeder.SeedAsync(scope.ServiceProvider);
+    var asBuiltPlanProcessId = await AsBuiltPlanWorkflowSeeder.SeedAsync(scope.ServiceProvider);
 
     PossessionRequestService.SetDDFCProcessId(processId);
+    PossessionRequestService.SetRevisedPlanProcessId(revisedPlanProcessId);
+    PossessionRequestService.SetAsBuiltPlanProcessId(asBuiltPlanProcessId);
 }
 
 // ── Middleware ────────────────────────────────────────────────────────────────

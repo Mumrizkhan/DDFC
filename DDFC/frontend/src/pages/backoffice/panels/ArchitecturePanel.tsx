@@ -45,7 +45,7 @@ export const ArchitecturePanel: React.FC<Props> = ({ request, requestId }) => {
   };
 
   return (
-    <Card title="Architecture Panel">
+    <Card title="Architect Panel">
       <div className="space-y-6">
 
         {/* Undertaking button */}

@@ -75,7 +75,9 @@ public record CreateRequestDto(
     Guid CustomerId, Guid PlotId, string PlotNumber, string SectorNo, string PhaseNo,
     string FileNo, string MembershipDPRNo,
     string OwnerTitle, string OwnerName, string GuardianName, string GuardianRelation,
-    string? Contractor = null);
+    string? Contractor = null,
+    RequestType RequestType = RequestType.PossessionDesign,
+    Guid? LinkedPossessionRequestId = null);
 
 public record SoilTestDto(
     DateTime TestDate, string LabName, string SoilBearingCapacity,

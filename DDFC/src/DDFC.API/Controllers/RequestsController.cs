@@ -28,7 +28,7 @@ public class RequestsController : ControllerBase
     // ── Queries ───────────────────────────────────────────────────────────────
     [HttpGet]
     [Authorize(Policy = "StaffOrAdmin")]
-    public async Task<IActionResult> GetAll([FromQuery] string? status)
+    public async Task<IActionResult> GetAll([FromQuery] string? status, [FromQuery] Guid? customerId, [FromQuery] int? requestType)
     {
         var q = _db.PossessionRequests
             .Include(r => r.Customer)
@@ -43,6 +43,12 @@ public class RequestsController : ControllerBase
                 .ToArray();
             q = q.Where(r => statuses.Contains(r.Status));
         }
+
+        if (customerId.HasValue)
+            q = q.Where(r => r.CustomerId == customerId.Value);
+
+        if (requestType.HasValue)
+            q = q.Where(r => (int)r.RequestType == requestType.Value);
 
         var list = (await q.OrderByDescending(r => r.CreatedAt).ToListAsync())
             .Select(r => MapToDto(r));
@@ -1246,6 +1252,10 @@ public class RequestsController : ControllerBase
         SupervisionPackageTotal:         r.SelectedSupervisionPackage?.LineItems.Where(li => !li.IsFree).Sum(li => li.AmountDDFC),
         ChallanNo:       r.Payments.OrderByDescending(p => p.CreatedAt).FirstOrDefault()?.ChallanNo,
         PaymentStatus:   r.Payments.OrderByDescending(p => p.CreatedAt).FirstOrDefault()?.Status.ToString(),
+        SelectedPackageId:   r.SelectedPackageId,
+        SelectedDesignType:  r.SelectedPackage?.DesignType.ToString(),
+        RequestType:         r.RequestType.ToString(),
+        LinkedPossessionRequestId: null, // not stored on entity; informational only
         DelayUndertaking: r.DelayUndertaking == null ? null : new DelayUndertakingDto(
             r.DelayUndertaking.Id,
             r.DelayUndertaking.InitiatedBy.ToString(),
@@ -1402,6 +1412,10 @@ public record PossessionRequestDto(
     decimal? SupervisionPackageTotal,
     string?  ChallanNo,
     string?  PaymentStatus,
+    Guid?    SelectedPackageId,
+    string?  SelectedDesignType,
+    string   RequestType,
+    Guid?    LinkedPossessionRequestId,
     DelayUndertakingDto? DelayUndertaking,
     ArchitectUndertakingDto? ArchitectUndertaking,
     PlotAnnexationDto? PlotAnnexation,

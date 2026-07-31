@@ -154,10 +154,10 @@ public static class DDFCWorkflowSeeder
         stepPAInitial.Actions.Add(new StepAction { Name = "Upload Soil Test", ActionType = ActionType.Upload });
         stepPAInitial.Actions.Add(new StepAction { Name = "Assign Architect", ActionType = ActionType.General });
 
-        // ---- Step 10: Architecture Department â€“ House Plan Design ----
+        // ---- Step 10: Architect Department â€" House Plan Design ----
         var step7 = new ProcessStep
         {
-            Name = "Architecture Department \u2013 House Plan Design",
+            Name = "Architect Department \u2013 House Plan Design",
             Order = 10,
             ActionCompletionMode = ActionCompletionMode.All
         };

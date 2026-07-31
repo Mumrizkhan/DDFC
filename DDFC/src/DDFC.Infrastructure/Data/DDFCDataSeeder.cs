@@ -14,7 +14,25 @@ public static class DDFCDataSeeder
         UserManager<User>    userManager,
         RoleManager<Role>    roleManager)
     {
-        // Guard – skip if data already seeded
+        // ══════════════════════════════════════════════════════════════════════
+        // ── STEP 5/6: Plots & Customers — always run (own guards inside) ──────
+        // ══════════════════════════════════════════════════════════════════════
+        await SeedPlotsAsync(db);
+        await SeedCustomersAsync(db);
+
+        // ── Seed new workflow packages independently (run even after initial seed) ──
+        if (!db.Packages.Any(p => p.PackageCategory == PackageCategory.RevisedPlan))
+        {
+            SeedRevisedPlanPackages(db);
+            await db.SaveChangesAsync();
+        }
+        if (!db.Packages.Any(p => p.PackageCategory == PackageCategory.AsBuiltPlan))
+        {
+            SeedAsBuiltPlanPackages(db);
+            await db.SaveChangesAsync();
+        }
+
+        // Guard – skip roles/users/packages if already seeded
         if (await roleManager.Roles.AnyAsync()) return;
 
         // ══════════════════════════════════════════════════════════════════════
@@ -485,6 +503,58 @@ public static class DDFCDataSeeder
         await db.SaveChangesAsync();
     }
 
+    // ── Revised Plan packages (flat-fee per plot size) ────────────────────────
+    private static void SeedRevisedPlanPackages(DDFCDbContext db)
+    {
+        void Add(PlotSize size, DesignType type, decimal fee)
+        {
+            var pkg = new Package
+            {
+                PlotType        = PlotType.Residential,
+                PlotSize        = size,
+                PackageTier     = PackageTier.Bronze,
+                PackageCategory = PackageCategory.RevisedPlan,
+                DesignType      = type,
+                IsActive        = true,
+            };
+            pkg.LineItems.Add(Li("Service Fee", fee, false, 1));
+            db.Packages.Add(pkg);
+        }
+
+        Add(PlotSize.FiveMarla,  DesignType.DdfcInclusive,  20_000m);
+        Add(PlotSize.FiveMarla,  DesignType.ExclusiveDesign, 20_000m);
+        Add(PlotSize.TenMarla,   DesignType.DdfcInclusive,  30_000m);
+        Add(PlotSize.TenMarla,   DesignType.ExclusiveDesign, 30_000m);
+        Add(PlotSize.OneKanal,   DesignType.DdfcInclusive,  35_000m);
+        Add(PlotSize.OneKanal,   DesignType.ExclusiveDesign, 35_000m);
+    }
+
+    // ── As-Built Plan packages (flat-fee per plot size) ───────────────────────
+    private static void SeedAsBuiltPlanPackages(DDFCDbContext db)
+    {
+        void Add(PlotSize size, DesignType type, decimal fee)
+        {
+            var pkg = new Package
+            {
+                PlotType        = PlotType.Residential,
+                PlotSize        = size,
+                PackageTier     = PackageTier.Bronze,
+                PackageCategory = PackageCategory.AsBuiltPlan,
+                DesignType      = type,
+                IsActive        = true,
+            };
+            pkg.LineItems.Add(Li("Service Fee", fee, false, 1));
+            db.Packages.Add(pkg);
+        }
+
+        Add(PlotSize.FiveMarla,  DesignType.DdfcInclusive,  15_000m);
+        Add(PlotSize.FiveMarla,  DesignType.ExclusiveDesign, 15_000m);
+        Add(PlotSize.TenMarla,   DesignType.DdfcInclusive,  25_000m);
+        Add(PlotSize.TenMarla,   DesignType.ExclusiveDesign, 25_000m);
+        Add(PlotSize.OneKanal,   DesignType.DdfcInclusive,  30_000m);
+        Add(PlotSize.OneKanal,   DesignType.ExclusiveDesign, 30_000m);
+    }
+
     // ── House Design packages (exact pricing from DDFC pamphlet) ─────────────
 
     private static void SeedHouseDesignPackages(DDFCDbContext db)
@@ -855,6 +925,145 @@ public static class DDFCDataSeeder
         IsFree          = isFree,
         SortOrder       = order,
     };
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // ── Plots (DHA Peshawar Phase 1 representative sample) ────────────────────
+    // ══════════════════════════════════════════════════════════════════════════
+    private static async Task SeedPlotsAsync(DDFCDbContext db)
+    {
+        if (await db.Plots.AnyAsync()) return;
+
+        var plots = new List<Plot>();
+
+        // ── Sector A – Residential ───────────────────────────────────────────
+        plots.AddRange(new[]
+        {
+            P("001-A", "A", "1",  "1", PlotSize.FiveMarla,  PlotType.Residential, 25m, 25m, 20m, 20m, "Road",     "Plot A-002", "Plot B-001", "Street 1"),
+            P("002-A", "A", "1",  "1", PlotSize.FiveMarla,  PlotType.Residential, 25m, 25m, 20m, 20m, "Plot A-001","Plot A-003", "Plot B-002", "Street 1"),
+            P("003-A", "A", "1",  "1", PlotSize.FiveMarla,  PlotType.Residential, 25m, 25m, 20m, 20m, "Plot A-002","Plot A-004", "Plot B-003", "Street 1"),
+            P("004-A", "A", "1",  "1", PlotSize.FiveMarla,  PlotType.Residential, 25m, 25m, 20m, 20m, "Plot A-003","Park",       "Plot B-004", "Street 1"),
+            P("005-A", "A", "1",  "1", PlotSize.FiveMarla,  PlotType.Residential, 25m, 25m, 20m, 20m, "Road",     "Plot A-006", "Park",       "Street 2"),
+            P("006-A", "A", "1",  "1", PlotSize.FiveMarla,  PlotType.Residential, 25m, 25m, 20m, 20m, "Plot A-005","Plot A-007", "Park",       "Street 2"),
+            P("007-A", "A", "2",  "1", PlotSize.TenMarla,   PlotType.Residential, 35m, 35m, 25m, 25m, "Road",     "Plot A-008", "Plot C-007", "Street 3"),
+            P("008-A", "A", "2",  "1", PlotSize.TenMarla,   PlotType.Residential, 35m, 35m, 25m, 25m, "Plot A-007","Plot A-009", "Plot C-008", "Street 3"),
+            P("009-A", "A", "2",  "1", PlotSize.TenMarla,   PlotType.Residential, 35m, 35m, 25m, 25m, "Plot A-008","Park",       "Plot C-009", "Street 3"),
+            P("010-A", "A", "3",  "1", PlotSize.OneKanal,   PlotType.Residential, 50m, 50m, 40m, 40m, "Road",     "Plot A-011", "Plot D-010", "Main Boulevard"),
+            P("011-A", "A", "3",  "1", PlotSize.OneKanal,   PlotType.Residential, 50m, 50m, 40m, 40m, "Plot A-010","Plot A-012", "Plot D-011", "Main Boulevard"),
+            P("012-A", "A", "3",  "1", PlotSize.OneKanal,   PlotType.Residential, 50m, 50m, 40m, 40m, "Plot A-011","Open Space", "Plot D-012", "Main Boulevard"),
+            P("013-A", "A", "4",  "1", PlotSize.TwoKanal,   PlotType.Residential, 70m, 70m, 55m, 55m, "Road",     "Plot A-014", "Masjid",     "Main Boulevard"),
+            P("014-A", "A", "4",  "1", PlotSize.TwoKanal,   PlotType.Residential, 70m, 70m, 55m, 55m, "Plot A-013","Open Space", "Masjid",     "Main Boulevard"),
+        });
+
+        // ── Sector B – Residential ───────────────────────────────────────────
+        plots.AddRange(new[]
+        {
+            P("001-B", "B", "1",  "1", PlotSize.FiveMarla,  PlotType.Residential, 25m, 25m, 20m, 20m, "Road",      "Plot B-002", "Plot A-001", "Street 5"),
+            P("002-B", "B", "1",  "1", PlotSize.FiveMarla,  PlotType.Residential, 25m, 25m, 20m, 20m, "Plot B-001","Plot B-003", "Plot A-002", "Street 5"),
+            P("003-B", "B", "1",  "1", PlotSize.FiveMarla,  PlotType.Residential, 25m, 25m, 20m, 20m, "Plot B-002","Plot B-004", "Plot A-003", "Street 5"),
+            P("004-B", "B", "1",  "1", PlotSize.FiveMarla,  PlotType.Residential, 25m, 25m, 20m, 20m, "Plot B-003","Park",       "Plot A-004", "Street 5"),
+            P("005-B", "B", "2",  "1", PlotSize.TenMarla,   PlotType.Residential, 35m, 35m, 25m, 25m, "Road",      "Plot B-006", "Open Space", "Street 6"),
+            P("006-B", "B", "2",  "1", PlotSize.TenMarla,   PlotType.Residential, 35m, 35m, 25m, 25m, "Plot B-005","Plot B-007", "Open Space", "Street 6"),
+            P("007-B", "B", "2",  "1", PlotSize.TenMarla,   PlotType.Residential, 35m, 35m, 25m, 25m, "Plot B-006","Park",       "Road",       "Street 6"),
+            P("008-B", "B", "3",  "1", PlotSize.OneKanal,   PlotType.Residential, 50m, 50m, 40m, 40m, "Road",      "Plot B-009", "Plot E-008", "Sector Road"),
+            P("009-B", "B", "3",  "1", PlotSize.OneKanal,   PlotType.Residential, 50m, 50m, 40m, 40m, "Plot B-008","Plot B-010", "Plot E-009", "Sector Road"),
+            P("010-B", "B", "3",  "1", PlotSize.OneKanal,   PlotType.Residential, 50m, 50m, 40m, 40m, "Plot B-009","Open Space", "Plot E-010", "Sector Road"),
+        });
+
+        // ── Sector C – Residential ───────────────────────────────────────────
+        plots.AddRange(new[]
+        {
+            P("001-C", "C", "1",  "1", PlotSize.FiveMarla,  PlotType.Residential, 25m, 25m, 20m, 20m, "Road",      "Plot C-002", "Plot F-001", "Street 9"),
+            P("002-C", "C", "1",  "1", PlotSize.FiveMarla,  PlotType.Residential, 25m, 25m, 20m, 20m, "Plot C-001","Plot C-003", "Plot F-002", "Street 9"),
+            P("003-C", "C", "1",  "1", PlotSize.FiveMarla,  PlotType.Residential, 25m, 25m, 20m, 20m, "Plot C-002","Park",       "Plot F-003", "Street 9"),
+            P("004-C", "C", "2",  "1", PlotSize.TenMarla,   PlotType.Residential, 35m, 35m, 25m, 25m, "Road",      "Plot C-005", "Road",       "Street 10"),
+            P("005-C", "C", "2",  "1", PlotSize.TenMarla,   PlotType.Residential, 35m, 35m, 25m, 25m, "Plot C-004","Plot C-006", "Road",       "Street 10"),
+            P("006-C", "C", "2",  "1", PlotSize.TenMarla,   PlotType.Residential, 35m, 35m, 25m, 25m, "Plot C-005","Park",       "Road",       "Street 10"),
+            P("007-C", "C", "3",  "1", PlotSize.OneKanal,   PlotType.Residential, 50m, 50m, 40m, 40m, "Road",      "Plot C-008", "Plot G-007", "Sector Road"),
+            P("008-C", "C", "3",  "1", PlotSize.OneKanal,   PlotType.Residential, 50m, 50m, 40m, 40m, "Plot C-007","Open Space", "Plot G-008", "Sector Road"),
+            P("009-C", "C", "4",  "1", PlotSize.TwoKanal,   PlotType.Residential, 70m, 70m, 55m, 55m, "Road",      "Plot C-010", "Open Space", "Main Boulevard"),
+            P("010-C", "C", "4",  "1", PlotSize.TwoKanal,   PlotType.Residential, 70m, 70m, 55m, 55m, "Plot C-009","Park",       "Open Space", "Main Boulevard"),
+        });
+
+        // ── Sector D – Mixed (Residential & Commercial) ──────────────────────
+        plots.AddRange(new[]
+        {
+            P("001-D", "D", "1",  "1", PlotSize.FiveMarla,  PlotType.Residential, 25m, 25m, 20m, 20m, "Road",      "Plot D-002", "Road",       "Street 12"),
+            P("002-D", "D", "1",  "1", PlotSize.FiveMarla,  PlotType.Residential, 25m, 25m, 20m, 20m, "Plot D-001","Plot D-003", "Road",       "Street 12"),
+            P("003-D", "D", "1",  "1", PlotSize.TenMarla,   PlotType.Residential, 35m, 35m, 25m, 25m, "Plot D-002","Plot D-004", "Park",       "Street 12"),
+            P("004-D", "D", "1",  "1", PlotSize.TenMarla,   PlotType.Residential, 35m, 35m, 25m, 25m, "Plot D-003","Plot D-005", "Park",       "Street 12"),
+            P("005-D", "D", "2",  "1", PlotSize.OneKanal,   PlotType.Residential, 50m, 50m, 40m, 40m, "Road",      "Plot D-006", "Open Space", "Main Boulevard"),
+            P("006-D", "D", "2",  "1", PlotSize.TwoKanal,   PlotType.Residential, 70m, 70m, 55m, 55m, "Plot D-005","Open Space", "Masjid",     "Main Boulevard"),
+            // Commercial plots in Sector D
+            P("C-01-D","D", "3",  "1", PlotSize.FourMarla,  PlotType.Commercial,  20m, 20m, 18m, 18m, "Road",      "C-02-D",    "Road",       "Commercial Strip"),
+            P("C-02-D","D", "3",  "1", PlotSize.FourMarla,  PlotType.Commercial,  20m, 20m, 18m, 18m, "C-01-D",    "C-03-D",    "Road",       "Commercial Strip"),
+            P("C-03-D","D", "3",  "1", PlotSize.FourMarla,  PlotType.Commercial,  20m, 20m, 18m, 18m, "C-02-D",    "C-04-D",    "Road",       "Commercial Strip"),
+            P("C-04-D","D", "3",  "1", PlotSize.EightMarla, PlotType.Commercial,  30m, 30m, 25m, 25m, "C-03-D",    "C-05-D",    "Road",       "Commercial Strip"),
+            P("C-05-D","D", "3",  "1", PlotSize.EightMarla, PlotType.Commercial,  30m, 30m, 25m, 25m, "C-04-D",    "Open Space","Road",       "Commercial Strip"),
+        });
+
+        // ── Sector E – Commercial Zone ───────────────────────────────────────
+        plots.AddRange(new[]
+        {
+            P("C-01-E","E", "1",  "1", PlotSize.FourMarla,  PlotType.Commercial,  20m, 20m, 18m, 18m, "Road",      "C-02-E",    "Road",       "Main Commercial Road"),
+            P("C-02-E","E", "1",  "1", PlotSize.FourMarla,  PlotType.Commercial,  20m, 20m, 18m, 18m, "C-01-E",    "C-03-E",    "Road",       "Main Commercial Road"),
+            P("C-03-E","E", "1",  "1", PlotSize.FourMarla,  PlotType.Commercial,  20m, 20m, 18m, 18m, "C-02-E",    "C-04-E",    "Road",       "Main Commercial Road"),
+            P("C-04-E","E", "1",  "1", PlotSize.FourMarla,  PlotType.Commercial,  20m, 20m, 18m, 18m, "C-03-E",    "C-05-E",    "Road",       "Main Commercial Road"),
+            P("C-05-E","E", "2",  "1", PlotSize.EightMarla, PlotType.Commercial,  30m, 30m, 25m, 25m, "Road",      "C-06-E",    "Open Space", "Main Commercial Road"),
+            P("C-06-E","E", "2",  "1", PlotSize.EightMarla, PlotType.Commercial,  30m, 30m, 25m, 25m, "C-05-E",    "C-07-E",    "Open Space", "Main Commercial Road"),
+            P("C-07-E","E", "2",  "1", PlotSize.EightMarla, PlotType.Commercial,  30m, 30m, 25m, 25m, "C-06-E",    "C-08-E",    "Road",       "Main Commercial Road"),
+            P("C-08-E","E", "3",  "1", PlotSize.OneKanal,   PlotType.Commercial,  50m, 50m, 40m, 40m, "Road",      "C-09-E",    "Road",       "Main Commercial Road"),
+            P("C-09-E","E", "3",  "1", PlotSize.OneKanal,   PlotType.Commercial,  50m, 50m, 40m, 40m, "C-08-E",    "Open Space","Road",       "Main Commercial Road"),
+            P("C-10-E","E", "3",  "1", PlotSize.OneKanal,   PlotType.Commercial,  50m, 50m, 40m, 40m, "C-09-E",    "Park",      "Road",       "Main Commercial Road"),
+        });
+
+        db.Plots.AddRange(plots);
+        await db.SaveChangesAsync();
+    }
+
+    private static Plot P(
+        string number, string sector, string street, string phase,
+        PlotSize size, PlotType type,
+        decimal l1, decimal l2, decimal s1, decimal s2,
+        string north, string south, string east, string west) => new()
+    {
+        PlotNumber    = number,
+        SectorNo      = sector,
+        StreetNo      = street,
+        PhaseNo       = phase,
+        PlotSize      = size,
+        PlotType      = type,
+        CurrentStatus = PlotStatus.Available,
+        LongerSide1   = l1,
+        LongerSide2   = l2,
+        ShorterSide1  = s1,
+        ShorterSide2  = s2,
+        BoundedNorth  = north,
+        BoundedSouth  = south,
+        BoundedEast   = east,
+        BoundedWest   = west,
+    };
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // ── Demo Customers ────────────────────────────────────────────────────────
+    // ══════════════════════════════════════════════════════════════════════════
+    private static async Task SeedCustomersAsync(DDFCDbContext db)
+    {
+        if (await db.Customers.AnyAsync()) return;
+
+        db.Customers.AddRange(
+            new Customer { FullName = "Muhammad Rizwan Khan",   CNIC = "17301-1234567-1", PhoneNumber = "0300-1234567", Email = "rizwan.khan@gmail.com",    Address = "House 12, Street 3, Hayatabad, Peshawar" },
+            new Customer { FullName = "Amina Bibi",             CNIC = "17301-2345678-2", PhoneNumber = "0301-2345678", Email = "amina.bibi@yahoo.com",      Address = "Flat 4, Block C, University Town, Peshawar" },
+            new Customer { FullName = "Tariq Mehmood",          CNIC = "17301-3456789-3", PhoneNumber = "0302-3456789", Email = "tariq.m@hotmail.com",       Address = "Qila Road, Peshawar Cantonment" },
+            new Customer { FullName = "Sadia Noor",             CNIC = "17301-4567890-4", PhoneNumber = "0303-4567890", Email = "sadia.noor@gmail.com",      Address = "House 88, Sector F6, Islamabad" },
+            new Customer { FullName = "Khalid Hussain",         CNIC = "17301-5678901-5", PhoneNumber = "0304-5678901", Email = "khalid.h@outlook.com",      Address = "Village Chamkani, Peshawar" },
+            new Customer { FullName = "Rukhsana Begum",         CNIC = "17301-6789012-6", PhoneNumber = "0305-6789012", Email = null,                        Address = "Khyber Road, Peshawar" },
+            new Customer { FullName = "Asad Ullah",             CNIC = "17301-7890123-7", PhoneNumber = "0306-7890123", Email = "asad.ullah@gmail.com",      Address = "Ring Road, Peshawar" },
+            new Customer { FullName = "Nadia Perveen",          CNIC = "17301-8901234-8", PhoneNumber = "0307-8901234", Email = "nadia.p@yahoo.com",         Address = "House 5, DHA Phase 1, Peshawar" },
+            new Customer { FullName = "Zahid Anwar",            CNIC = "17301-9012345-9", PhoneNumber = "0308-9012345", Email = "zahid.anwar@gmail.com",     Address = "Model Town, Peshawar" },
+            new Customer { FullName = "Farrukh Niaz",           CNIC = "17301-0123456-0", PhoneNumber = "0309-0123456", Email = "farrukh.n@gmail.com",       Address = "Gulbahar, Peshawar" }
+        );
+        await db.SaveChangesAsync();
+    }
 
     // ══════════════════════════════════════════════════════════════════════════
     // ── Helper Methods ────────────────────────────────────────────────────────

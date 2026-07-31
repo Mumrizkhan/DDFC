@@ -94,10 +94,11 @@ export type RequestStatus =
   | 'Rejected'
   | 'OnHold';
 
+export type RequestType = 'PossessionDesign' | 'RevisedPlan' | 'AsBuiltPlan';
 export type PlotType = 'Residential' | 'Commercial';
 export type PlotSize = 'FourMarla' | 'FiveMarla' | 'EightMarla' | 'TenMarla' | 'OneKanal' | 'TwoKanal';
 export type PackageTier = 'Bronze' | 'Silver' | 'Gold';
-export type PackageCategory = 'HouseDesign' | 'InteriorDesign' | 'Supervision';
+export type PackageCategory = 'HouseDesign' | 'InteriorDesign' | 'Supervision' | 'RevisedPlan' | 'AsBuiltPlan';
 export type DesignType = 'DdfcInclusive' | 'ExclusiveDesign';
 export type TicketStatus = 'Open' | 'InProgress' | 'Resolved' | 'Closed';
 export type TicketCategory =
@@ -225,6 +226,10 @@ export interface PossessionRequest {
   challanNo?: string;
   paymentStatus?: string;
   status: RequestStatus;
+  requestType?: RequestType;
+  selectedPackageId?: string;
+  selectedDesignType?: string;
+  linkedPossessionRequestId?: string;
   submittedAt: string;
   updatedAt?: string;
   transferApproved?: boolean;
@@ -334,6 +339,8 @@ export interface CreateRequestDto {
   guardianName: string;
   guardianRelation: string;
   contractor?: string;
+  requestType?: number; // 0=PossessionDesign, 1=RevisedPlan, 2=AsBuiltPlan
+  linkedPossessionRequestId?: string;
 }
 
 // ─── Packages ────────────────────────────────────────────────────────────────
