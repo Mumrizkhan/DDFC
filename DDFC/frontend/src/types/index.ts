@@ -99,7 +99,7 @@ export type PlotType = 'Residential' | 'Commercial';
 export type PlotSize = 'FourMarla' | 'FiveMarla' | 'EightMarla' | 'TenMarla' | 'OneKanal' | 'TwoKanal';
 export type PackageTier = 'Bronze' | 'Silver' | 'Gold';
 export type PackageCategory = 'HouseDesign' | 'InteriorDesign' | 'Supervision' | 'RevisedPlan' | 'AsBuiltPlan';
-export type DesignType = 'DdfcInclusive' | 'ExclusiveDesign';
+export type DesignType = 'InclusiveDesign' | 'ExclusiveDesign';
 export type TicketStatus = 'Open' | 'InProgress' | 'Resolved' | 'Closed';
 export type TicketCategory =
   | 'DocumentIssue'
@@ -202,7 +202,7 @@ export interface PossessionRequest {
   membershipDPRNo: string;
   ownerTitle?: string;
   ownerName?: string;
-  guardianName?: string;
+  sonDaughterWifeOf?: string;
   guardianRelation?: string;
   contractor?: string;
   // Admin review step
@@ -214,6 +214,7 @@ export interface PossessionRequest {
   eStampPaperUrl?: string;
   authorizedPersonCnicUrl?: string;
   authorizedPersonPhone?: string;
+  authorizedPersonName?: string;
   packageTier?: string;
   packageTotal?: number;
   selectedInteriorDesignPackageId?: string;
@@ -336,8 +337,9 @@ export interface CreateRequestDto {
   membershipDPRNo: string;
   ownerTitle: string;
   ownerName: string;
-  guardianName: string;
+  sonDaughterWifeOf: string;
   guardianRelation: string;
+  authorizedPersonName?: string;
   contractor?: string;
   requestType?: number; // 0=PossessionDesign, 1=RevisedPlan, 2=AsBuiltPlan
   linkedPossessionRequestId?: string;
@@ -358,6 +360,7 @@ export interface Package {
 }
 
 export interface PackageLineItem {
+  id: string;
   lineItemId: string;
   packageId: string;
   serviceName: string;

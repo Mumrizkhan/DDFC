@@ -22,9 +22,10 @@ const RELATION_OPTIONS = [
 interface OwnerInfoSectionProps {
   register: UseFormRegister<FormValues>;
   errors: FieldErrors<FormValues>;
+  watchedRelation: string;
 }
 
-export const OwnerInfoSection: React.FC<OwnerInfoSectionProps> = ({ register, errors }) => (
+export const OwnerInfoSection: React.FC<OwnerInfoSectionProps> = ({ register, errors, watchedRelation }) => (
   <>
     <div className="border border-gray-200 rounded-lg p-4 space-y-4">
       <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
@@ -53,12 +54,12 @@ export const OwnerInfoSection: React.FC<OwnerInfoSectionProps> = ({ register, er
         </div>
         <div className="sm:col-span-2">
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            Guardian Name <span className="text-red-500">*</span>
+            Son/Daughter/Wife of <span className="text-red-500">*</span>
           </label>
           <Input
-            {...register('guardianName')}
+            {...register('sonDaughterWifeOf')}
             placeholder="Full name"
-            error={errors.guardianName?.message}
+            error={errors.sonDaughterWifeOf?.message}
           />
         </div>
       </div>
@@ -74,6 +75,19 @@ export const OwnerInfoSection: React.FC<OwnerInfoSectionProps> = ({ register, er
         error={errors.guardianRelation?.message}
       />
     </div>
+
+    {watchedRelation && watchedRelation !== 'Self' && (
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Authorized Representative Name <span className="text-red-500">*</span>
+        </label>
+        <Input
+          {...register('authorizedPersonName')}
+          placeholder="Full name of authorized person"
+          error={errors.authorizedPersonName?.message}
+        />
+      </div>
+    )}
 
     <div>
       <label className="block text-sm font-medium text-gray-700 mb-2">

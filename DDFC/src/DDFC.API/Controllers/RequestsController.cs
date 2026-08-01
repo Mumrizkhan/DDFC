@@ -357,7 +357,7 @@ public class RequestsController : ControllerBase
                 <td>CNIC</td><td>{{customer?.CNIC ?? "—"}}</td>
               </tr>
               <tr>
-                <td>Guardian / S/o / D/o</td><td colspan="3">{{req.GuardianRelation}}: {{req.GuardianName}}</td>
+                <td>S/o / D/o / W/o</td><td colspan="3">{{req.GuardianRelation}}: {{req.SonDaughterWifeOf}}</td>
               </tr>
               <tr>
                 <td>File No.</td><td>{{req.FileNo}}</td>
@@ -1199,7 +1199,7 @@ public class RequestsController : ControllerBase
         MembershipDPRNo:         r.MembershipDPRNo,
         OwnerTitle:              r.OwnerTitle,
         OwnerName:               r.OwnerName,
-        GuardianName:            r.GuardianName,
+        SonDaughterWifeOf:       r.SonDaughterWifeOf,
         GuardianRelation:        r.GuardianRelation,
         Contractor:              r.Contractor,
         AllotmentLetterUrl:      r.AllotmentLetterUrl,
@@ -1210,6 +1210,7 @@ public class RequestsController : ControllerBase
         EStampPaperUrl:          r.EStampPaperUrl,
         AuthorizedPersonCnicUrl: r.AuthorizedPersonCnicUrl,
         AuthorizedPersonPhone:   r.AuthorizedPersonPhone,
+        AuthorizedPersonName:    r.AuthorizedPersonName,
         Status:                  r.Status.ToString(),
         SubmittedAt:             r.SubmittedAt,
         UpdatedAt:               r.UpdatedAt,
@@ -1377,7 +1378,7 @@ public record PossessionRequestDto(
     string   MembershipDPRNo,
     string   OwnerTitle,
     string   OwnerName,
-    string   GuardianName,
+    string   SonDaughterWifeOf,
     string   GuardianRelation,
     string?  Contractor,
     string?  AllotmentLetterUrl,
@@ -1388,6 +1389,7 @@ public record PossessionRequestDto(
     string?  EStampPaperUrl,
     string?  AuthorizedPersonCnicUrl,
     string?  AuthorizedPersonPhone,
+    string?  AuthorizedPersonName,
     string   Status,
     DateTime SubmittedAt,
     DateTime? UpdatedAt,

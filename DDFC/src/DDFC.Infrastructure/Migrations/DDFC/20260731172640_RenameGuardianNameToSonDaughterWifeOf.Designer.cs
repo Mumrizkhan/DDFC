@@ -4,6 +4,7 @@ using DDFC.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace DDFC.Infrastructure.Migrations.DDFC
 {
     [DbContext(typeof(DDFCDbContext))]
-    partial class DDFCDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260731172640_RenameGuardianNameToSonDaughterWifeOf")]
+    partial class RenameGuardianNameToSonDaughterWifeOf
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1078,9 +1081,6 @@ namespace DDFC.Infrastructure.Migrations.DDFC
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<string>("AuthorizedPersonCnicUrl")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("AuthorizedPersonName")
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("AuthorizedPersonPhone")

@@ -74,7 +74,8 @@ public record AdminReviewDto(
 public record CreateRequestDto(
     Guid CustomerId, Guid PlotId, string PlotNumber, string SectorNo, string PhaseNo,
     string FileNo, string MembershipDPRNo,
-    string OwnerTitle, string OwnerName, string GuardianName, string GuardianRelation,
+    string OwnerTitle, string OwnerName, string SonDaughterWifeOf, string GuardianRelation,
+    string? AuthorizedPersonName = null,
     string? Contractor = null,
     RequestType RequestType = RequestType.PossessionDesign,
     Guid? LinkedPossessionRequestId = null);

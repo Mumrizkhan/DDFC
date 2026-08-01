@@ -53,7 +53,7 @@ const PackagePickerGroup: React.FC<PackagePickerGroupProps> = ({
           </div>
           <ul className="space-y-0.5">
             {pkg.lineItems.sort((a, b) => a.sortOrder - b.sortOrder).map((li) => (
-              <li key={li.lineItemId} className="flex justify-between text-xs text-gray-500">
+              <li key={li.id ?? li.lineItemId} className="flex justify-between text-xs text-gray-500">
                 <span className="flex items-center gap-1">
                   <ChevronRight className="w-3 h-3 text-gray-300" />
                   {li.serviceName}
@@ -87,7 +87,7 @@ const uniqueByTier = (pkgs: PkgType[]): PkgType[] => {
 export const ReceptionPanel: React.FC<Props> = ({ request, requestId }) => {
   const dispatch = useAppDispatch();
 
-  const [designTrack, setDesignTrack] = useState<'DdfcInclusive' | 'ExclusiveDesign'>('DdfcInclusive');
+  const [designTrack, setDesignTrack] = useState<'InclusiveDesign' | 'ExclusiveDesign'>('InclusiveDesign');
 
   const [houseDesignPkgs,   setHouseDesignPkgs]   = useState<PkgType[]>([]);
   const [interiorPkgs,      setInteriorPkgs]       = useState<PkgType[]>([]);
@@ -243,7 +243,7 @@ export const ReceptionPanel: React.FC<Props> = ({ request, requestId }) => {
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Design Track</p>
                 <div className="grid grid-cols-2 gap-2">
                   {([
-                    { value: 'DdfcInclusive' as const,  label: 'Services through DDFC', sub: 'Standard inclusive pricing' },
+                    { value: 'InclusiveDesign' as const,  label: 'Inclusive Design',      sub: 'Standard inclusive pricing' },
                     { value: 'ExclusiveDesign' as const, label: 'Exclusive Design',       sub: 'Premium bespoke designs' },
                   ]).map((dt) => (
                     <button

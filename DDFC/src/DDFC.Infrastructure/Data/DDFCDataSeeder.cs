@@ -494,7 +494,7 @@ public static class DDFCDataSeeder
 
         // ══════════════════════════════════════════════════════════════════════
         // ── STEP 4: Seed Packages (from DHA DDFC official pamphlet) ─────────────
-        // Two design tracks per size/tier: DdfcInclusive and ExclusiveDesign
+        // Two design tracks per size/tier: InclusiveDesign and ExclusiveDesign
         // ══════════════════════════════════════════════════════════════════════
         SeedHouseDesignPackages(db);
         SeedInteriorDesignPackages(db);
@@ -521,11 +521,11 @@ public static class DDFCDataSeeder
             db.Packages.Add(pkg);
         }
 
-        Add(PlotSize.FiveMarla,  DesignType.DdfcInclusive,  20_000m);
+        Add(PlotSize.FiveMarla,  DesignType.InclusiveDesign,  20_000m);
         Add(PlotSize.FiveMarla,  DesignType.ExclusiveDesign, 20_000m);
-        Add(PlotSize.TenMarla,   DesignType.DdfcInclusive,  30_000m);
+        Add(PlotSize.TenMarla,   DesignType.InclusiveDesign,  30_000m);
         Add(PlotSize.TenMarla,   DesignType.ExclusiveDesign, 30_000m);
-        Add(PlotSize.OneKanal,   DesignType.DdfcInclusive,  35_000m);
+        Add(PlotSize.OneKanal,   DesignType.InclusiveDesign,  35_000m);
         Add(PlotSize.OneKanal,   DesignType.ExclusiveDesign, 35_000m);
     }
 
@@ -547,11 +547,11 @@ public static class DDFCDataSeeder
             db.Packages.Add(pkg);
         }
 
-        Add(PlotSize.FiveMarla,  DesignType.DdfcInclusive,  15_000m);
+        Add(PlotSize.FiveMarla,  DesignType.InclusiveDesign,  15_000m);
         Add(PlotSize.FiveMarla,  DesignType.ExclusiveDesign, 15_000m);
-        Add(PlotSize.TenMarla,   DesignType.DdfcInclusive,  25_000m);
+        Add(PlotSize.TenMarla,   DesignType.InclusiveDesign,  25_000m);
         Add(PlotSize.TenMarla,   DesignType.ExclusiveDesign, 25_000m);
-        Add(PlotSize.OneKanal,   DesignType.DdfcInclusive,  30_000m);
+        Add(PlotSize.OneKanal,   DesignType.InclusiveDesign,  30_000m);
         Add(PlotSize.OneKanal,   DesignType.ExclusiveDesign, 30_000m);
     }
 
@@ -567,7 +567,7 @@ public static class DDFCDataSeeder
         // Interior Design | Material Selection by Professional |
         // Walkthrough Animation | Scrutiny/Vetting Fee | Construction NOC Approval Fee
 
-        AddResidentialPackage(db, PlotSize.FiveMarla, PackageTier.Bronze, DesignType.DdfcInclusive,
+        AddResidentialPackage(db, PlotSize.FiveMarla, PackageTier.Bronze, DesignType.InclusiveDesign,
             processing: 20_000, soilTest: 30_000, arch: 80_000, structural: 40_000, mep: 25_000,
             elevation3D: 15_000, interior: 0, material: 0, walkthrough: 0);
 
@@ -575,7 +575,7 @@ public static class DDFCDataSeeder
             processing: 20_000, soilTest: 30_000, arch: 80_000, structural: 40_000, mep: 25_000,
             elevation3D: 120_000, interior: 0, material: 0, walkthrough: 0);
 
-        AddResidentialPackage(db, PlotSize.FiveMarla, PackageTier.Silver, DesignType.DdfcInclusive,
+        AddResidentialPackage(db, PlotSize.FiveMarla, PackageTier.Silver, DesignType.InclusiveDesign,
             processing: 20_000, soilTest: 30_000, arch: 80_000, structural: 40_000, mep: 25_000,
             elevation3D: 15_000, interior: 105_000, material: 0, walkthrough: 0);
 
@@ -583,7 +583,7 @@ public static class DDFCDataSeeder
             processing: 20_000, soilTest: 30_000, arch: 80_000, structural: 40_000, mep: 25_000,
             elevation3D: 120_000, interior: 45_000, material: 0, walkthrough: 0);
 
-        AddResidentialPackage(db, PlotSize.FiveMarla, PackageTier.Gold, DesignType.DdfcInclusive,
+        AddResidentialPackage(db, PlotSize.FiveMarla, PackageTier.Gold, DesignType.InclusiveDesign,
             processing: 20_000, soilTest: 0 /*Free*/, arch: 80_000, structural: 40_000, mep: 25_000,
             elevation3D: 15_000, interior: 105_000, material: 0 /*Free*/, walkthrough: 75_000);
 
@@ -592,7 +592,7 @@ public static class DDFCDataSeeder
             elevation3D: 120_000, interior: 105_000, material: 0, walkthrough: 75_000);
 
         // ── RESIDENTIAL: 10 Marla ────────────────────────────────────────────
-        AddResidentialPackage(db, PlotSize.TenMarla, PackageTier.Bronze, DesignType.DdfcInclusive,
+        AddResidentialPackage(db, PlotSize.TenMarla, PackageTier.Bronze, DesignType.InclusiveDesign,
             processing: 30_000, soilTest: 40_000, arch: 125_000, structural: 60_000, mep: 30_000,
             elevation3D: 20_000, interior: 0, material: 0, walkthrough: 0);
 
@@ -600,7 +600,7 @@ public static class DDFCDataSeeder
             processing: 30_000, soilTest: 40_000, arch: 125_000, structural: 60_000, mep: 30_000,
             elevation3D: 170_000, interior: 0, material: 0, walkthrough: 0);
 
-        AddResidentialPackage(db, PlotSize.TenMarla, PackageTier.Silver, DesignType.DdfcInclusive,
+        AddResidentialPackage(db, PlotSize.TenMarla, PackageTier.Silver, DesignType.InclusiveDesign,
             processing: 30_000, soilTest: 40_000, arch: 125_000, structural: 60_000, mep: 30_000,
             elevation3D: 20_000, interior: 120_000, material: 0, walkthrough: 0);
 
@@ -608,7 +608,7 @@ public static class DDFCDataSeeder
             processing: 30_000, soilTest: 40_000, arch: 125_000, structural: 60_000, mep: 30_000,
             elevation3D: 170_000, interior: 46_000, material: 0, walkthrough: 0);
 
-        AddResidentialPackage(db, PlotSize.TenMarla, PackageTier.Gold, DesignType.DdfcInclusive,
+        AddResidentialPackage(db, PlotSize.TenMarla, PackageTier.Gold, DesignType.InclusiveDesign,
             processing: 30_000, soilTest: 0, arch: 125_000, structural: 60_000, mep: 30_000,
             elevation3D: 20_000, interior: 120_000, material: 0, walkthrough: 100_000);
 
@@ -617,7 +617,7 @@ public static class DDFCDataSeeder
             elevation3D: 170_000, interior: 120_000, material: 0, walkthrough: 100_000);
 
         // ── RESIDENTIAL: 1 Kanal ─────────────────────────────────────────────
-        AddResidentialPackage(db, PlotSize.OneKanal, PackageTier.Bronze, DesignType.DdfcInclusive,
+        AddResidentialPackage(db, PlotSize.OneKanal, PackageTier.Bronze, DesignType.InclusiveDesign,
             processing: 50_000, soilTest: 50_000, arch: 200_000, structural: 100_000, mep: 50_000,
             elevation3D: 50_000, interior: 0, material: 0, walkthrough: 0);
 
@@ -625,7 +625,7 @@ public static class DDFCDataSeeder
             processing: 50_000, soilTest: 50_000, arch: 200_000, structural: 100_000, mep: 50_000,
             elevation3D: 300_000, interior: 0, material: 0, walkthrough: 0);
 
-        AddResidentialPackage(db, PlotSize.OneKanal, PackageTier.Silver, DesignType.DdfcInclusive,
+        AddResidentialPackage(db, PlotSize.OneKanal, PackageTier.Silver, DesignType.InclusiveDesign,
             processing: 50_000, soilTest: 50_000, arch: 200_000, structural: 100_000, mep: 50_000,
             elevation3D: 50_000, interior: 165_000, material: 0, walkthrough: 0);
 
@@ -633,7 +633,7 @@ public static class DDFCDataSeeder
             processing: 50_000, soilTest: 50_000, arch: 200_000, structural: 100_000, mep: 50_000,
             elevation3D: 300_000, interior: 65_000, material: 0, walkthrough: 0);
 
-        AddResidentialPackage(db, PlotSize.OneKanal, PackageTier.Gold, DesignType.DdfcInclusive,
+        AddResidentialPackage(db, PlotSize.OneKanal, PackageTier.Gold, DesignType.InclusiveDesign,
             processing: 50_000, soilTest: 0, arch: 200_000, structural: 100_000, mep: 50_000,
             elevation3D: 50_000, interior: 165_000, material: 0, walkthrough: 150_000);
 
@@ -642,7 +642,7 @@ public static class DDFCDataSeeder
             elevation3D: 300_000, interior: 165_000, material: 0, walkthrough: 150_000);
 
         // ── RESIDENTIAL: 2 Kanal (40 Marla) ─────────────────────────────────
-        AddResidentialPackage(db, PlotSize.TwoKanal, PackageTier.Bronze, DesignType.DdfcInclusive,
+        AddResidentialPackage(db, PlotSize.TwoKanal, PackageTier.Bronze, DesignType.InclusiveDesign,
             processing: 80_000, soilTest: 80_000, arch: 350_000, structural: 160_000, mep: 80_000,
             elevation3D: 80_000, interior: 0, material: 0, walkthrough: 0);
 
@@ -650,7 +650,7 @@ public static class DDFCDataSeeder
             processing: 80_000, soilTest: 80_000, arch: 350_000, structural: 160_000, mep: 80_000,
             elevation3D: 480_000, interior: 0, material: 0, walkthrough: 0);
 
-        AddResidentialPackage(db, PlotSize.TwoKanal, PackageTier.Silver, DesignType.DdfcInclusive,
+        AddResidentialPackage(db, PlotSize.TwoKanal, PackageTier.Silver, DesignType.InclusiveDesign,
             processing: 80_000, soilTest: 80_000, arch: 350_000, structural: 160_000, mep: 80_000,
             elevation3D: 80_000, interior: 250_000, material: 0, walkthrough: 0);
 
@@ -658,7 +658,7 @@ public static class DDFCDataSeeder
             processing: 80_000, soilTest: 80_000, arch: 350_000, structural: 160_000, mep: 80_000,
             elevation3D: 480_000, interior: 100_000, material: 0, walkthrough: 0);
 
-        AddResidentialPackage(db, PlotSize.TwoKanal, PackageTier.Gold, DesignType.DdfcInclusive,
+        AddResidentialPackage(db, PlotSize.TwoKanal, PackageTier.Gold, DesignType.InclusiveDesign,
             processing: 80_000, soilTest: 0, arch: 350_000, structural: 160_000, mep: 80_000,
             elevation3D: 80_000, interior: 250_000, material: 0, walkthrough: 250_000);
 
@@ -674,7 +674,7 @@ public static class DDFCDataSeeder
         // Interior Design | Walkthrough Animation |
         // Scrutiny/Vetting Fee | Construction NOC Approval Fee
 
-        AddCommercialPackage(db, PlotSize.FourMarla, PackageTier.Bronze, DesignType.DdfcInclusive,
+        AddCommercialPackage(db, PlotSize.FourMarla, PackageTier.Bronze, DesignType.InclusiveDesign,
             processing: 50_000, soilTest: 50_000, arch: 300_000, structural: 100_000, mep: 100_000,
             elevation3D: 50_000, interior: 0, walkthrough: 0, landscape: 0);
 
@@ -682,7 +682,7 @@ public static class DDFCDataSeeder
             processing: 50_000, soilTest: 50_000, arch: 300_000, structural: 100_000, mep: 100_000,
             elevation3D: 350_000, interior: 0, walkthrough: 0, landscape: 0);
 
-        AddCommercialPackage(db, PlotSize.FourMarla, PackageTier.Silver, DesignType.DdfcInclusive,
+        AddCommercialPackage(db, PlotSize.FourMarla, PackageTier.Silver, DesignType.InclusiveDesign,
             processing: 50_000, soilTest: 50_000, arch: 300_000, structural: 100_000, mep: 100_000,
             elevation3D: 50_000, interior: 250_000, walkthrough: 0, landscape: 0);
 
@@ -690,7 +690,7 @@ public static class DDFCDataSeeder
             processing: 50_000, soilTest: 50_000, arch: 300_000, structural: 100_000, mep: 100_000,
             elevation3D: 350_000, interior: 100_000, walkthrough: 0, landscape: 0);
 
-        AddCommercialPackage(db, PlotSize.FourMarla, PackageTier.Gold, DesignType.DdfcInclusive,
+        AddCommercialPackage(db, PlotSize.FourMarla, PackageTier.Gold, DesignType.InclusiveDesign,
             processing: 50_000, soilTest: 50_000, arch: 300_000, structural: 100_000, mep: 100_000,
             elevation3D: 50_000, interior: 250_000, walkthrough: 200_000, landscape: 100_000);
 
@@ -699,7 +699,7 @@ public static class DDFCDataSeeder
             elevation3D: 350_000, interior: 250_000, walkthrough: 200_000, landscape: 100_000);
 
         // ── COMMERCIAL: 8 Marla ──────────────────────────────────────────────
-        AddCommercialPackage(db, PlotSize.EightMarla, PackageTier.Bronze, DesignType.DdfcInclusive,
+        AddCommercialPackage(db, PlotSize.EightMarla, PackageTier.Bronze, DesignType.InclusiveDesign,
             processing: 80_000, soilTest: 100_000, arch: 460_000, structural: 200_000, mep: 180_000,
             elevation3D: 35_000, interior: 0, walkthrough: 0, landscape: 0);
 
@@ -707,7 +707,7 @@ public static class DDFCDataSeeder
             processing: 80_000, soilTest: 100_000, arch: 460_000, structural: 200_000, mep: 180_000,
             elevation3D: 365_000, interior: 0, walkthrough: 0, landscape: 0);
 
-        AddCommercialPackage(db, PlotSize.EightMarla, PackageTier.Silver, DesignType.DdfcInclusive,
+        AddCommercialPackage(db, PlotSize.EightMarla, PackageTier.Silver, DesignType.InclusiveDesign,
             processing: 80_000, soilTest: 100_000, arch: 460_000, structural: 200_000, mep: 180_000,
             elevation3D: 35_000, interior: 250_000, walkthrough: 0, landscape: 0);
 
@@ -715,7 +715,7 @@ public static class DDFCDataSeeder
             processing: 80_000, soilTest: 100_000, arch: 460_000, structural: 200_000, mep: 180_000,
             elevation3D: 365_000, interior: 100_000, walkthrough: 0, landscape: 0);
 
-        AddCommercialPackage(db, PlotSize.EightMarla, PackageTier.Gold, DesignType.DdfcInclusive,
+        AddCommercialPackage(db, PlotSize.EightMarla, PackageTier.Gold, DesignType.InclusiveDesign,
             processing: 80_000, soilTest: 100_000, arch: 460_000, structural: 200_000, mep: 180_000,
             elevation3D: 35_000, interior: 250_000, walkthrough: 250_000, landscape: 125_000);
 
@@ -725,7 +725,7 @@ public static class DDFCDataSeeder
 
         // ── COMMERCIAL: 1 Kanal ──────────────────────────────────────────────
         // (13 rows — includes Landscape Design)
-        AddCommercialPackage(db, PlotSize.OneKanal, PackageTier.Bronze, DesignType.DdfcInclusive,
+        AddCommercialPackage(db, PlotSize.OneKanal, PackageTier.Bronze, DesignType.InclusiveDesign,
             processing: 150_000, soilTest: 150_000, arch: 850_000, structural: 350_000, mep: 300_000,
             elevation3D: 40_000, interior: 0, walkthrough: 0, landscape: 0);
 
@@ -733,7 +733,7 @@ public static class DDFCDataSeeder
             processing: 150_000, soilTest: 150_000, arch: 850_000, structural: 350_000, mep: 300_000,
             elevation3D: 625_000, interior: 0, walkthrough: 0, landscape: 0);
 
-        AddCommercialPackage(db, PlotSize.OneKanal, PackageTier.Silver, DesignType.DdfcInclusive,
+        AddCommercialPackage(db, PlotSize.OneKanal, PackageTier.Silver, DesignType.InclusiveDesign,
             processing: 150_000, soilTest: 150_000, arch: 850_000, structural: 350_000, mep: 300_000,
             elevation3D: 40_000, interior: 250_000, walkthrough: 0, landscape: 0);
 
@@ -741,7 +741,7 @@ public static class DDFCDataSeeder
             processing: 150_000, soilTest: 150_000, arch: 850_000, structural: 350_000, mep: 300_000,
             elevation3D: 625_000, interior: 250_000, walkthrough: 0, landscape: 0);
 
-        AddCommercialPackage(db, PlotSize.OneKanal, PackageTier.Gold, DesignType.DdfcInclusive,
+        AddCommercialPackage(db, PlotSize.OneKanal, PackageTier.Gold, DesignType.InclusiveDesign,
             processing: 150_000, soilTest: 150_000, arch: 850_000, structural: 350_000, mep: 300_000,
             elevation3D: 40_000, interior: 250_000, walkthrough: 400_000, landscape: 400_000);
 
@@ -855,7 +855,7 @@ public static class DDFCDataSeeder
             };
             var mult = tier switch { PackageTier.Bronze => 1.0m, PackageTier.Silver => 1.5m, _ => 2.2m };
             var pkg = new Package { PlotType = pType, PlotSize = pSize, PackageTier = tier,
-                PackageCategory = PackageCategory.InteriorDesign, DesignType = DesignType.DdfcInclusive, IsActive = true };
+                PackageCategory = PackageCategory.InteriorDesign, DesignType = DesignType.InclusiveDesign, IsActive = true };
             int n = 1;
             pkg.LineItems.Add(Li("Interior Design Consultation",       baseAmt * mult * 0.10m, false, n++));
             pkg.LineItems.Add(Li("Space Planning & Layout",            baseAmt * mult * 0.15m, false, n++));
@@ -897,7 +897,7 @@ public static class DDFCDataSeeder
             };
             var mult = tier switch { PackageTier.Bronze => 1.0m, PackageTier.Silver => 1.5m, _ => 2.2m };
             var pkg = new Package { PlotType = pType, PlotSize = pSize, PackageTier = tier,
-                PackageCategory = PackageCategory.Supervision, DesignType = DesignType.DdfcInclusive, IsActive = true };
+                PackageCategory = PackageCategory.Supervision, DesignType = DesignType.InclusiveDesign, IsActive = true };
             int n = 1;
             pkg.LineItems.Add(Li("Site Supervision Visits",           baseAmt * mult * 0.25m, false, n++));
             pkg.LineItems.Add(Li("Construction Progress Reports",      baseAmt * mult * 0.20m, false, n++));

@@ -14,7 +14,7 @@ const CATEGORIES: { value: PackageCategory; label: string }[] = [
 ];
 
 const DESIGN_TYPES: { value: DesignType; label: string; desc: string }[] = [
-  { value: 'DdfcInclusive',  label: 'Services through DDFC',            desc: 'Standard services delivered by DDFC' },
+  { value: 'InclusiveDesign',  label: 'Inclusive Design',  desc: 'Standard inclusive services delivered by DDFC' },
   { value: 'ExclusiveDesign', label: 'Exclusive Design',                 desc: 'Premium bespoke design services' },
 ];
 
@@ -39,7 +39,7 @@ export const PackagePricingPage: React.FC = () => {
   const { packages, loading } = useAppSelector((s) => s.packages);
   const [plotType, setPlotType] = useState<PlotType>('Residential');
   const [category, setCategory] = useState<PackageCategory>('HouseDesign');
-  const [designType, setDesignType] = useState<DesignType>('DdfcInclusive');
+  const [designType, setDesignType] = useState<DesignType>('InclusiveDesign');
   const plotSizes = PLOT_SIZES_BY_TYPE[plotType];
   const [editingCell, setEditingCell] = useState<{ packageId: string; field: string } | null>(null);
   const [editValue, setEditValue] = useState('');
@@ -62,13 +62,13 @@ export const PackagePricingPage: React.FC = () => {
   const saveEdit = async () => {
     if (!editingCell) return;
     const { packageId, field } = editingCell;
-    const pkg = packages.find((p) => p.packageId === packageId);
+    const pkg = packages.find((p) => p.id === packageId);
     if (!pkg) return;
 
     const updated = {
       ...pkg,
       lineItems: pkg.lineItems.map((li) =>
-        li.lineItemId === field
+        li.id === field
           ? {
               ...li,
               isFree: editValue === '0' || editValue.toLowerCase() === 'free',
@@ -174,8 +174,8 @@ export const PackagePricingPage: React.FC = () => {
                           (li) => li.serviceName === serviceTemplate.serviceName
                         );
                         const isEditing =
-                          editingCell?.packageId === pkg?.packageId &&
-                          editingCell?.field === lineItem?.lineItemId;
+                          editingCell?.packageId === pkg?.id &&
+                          editingCell?.field === lineItem?.id;
 
                         return (
                           <td key={size} className="py-3 px-2 text-center">
@@ -205,8 +205,8 @@ export const PackagePricingPage: React.FC = () => {
                                   onClick={() =>
                                     pkg &&
                                     startEdit(
-                                      pkg.packageId,
-                                      lineItem.lineItemId,
+                                      pkg.id,
+                                      lineItem.id,
                                       lineItem.isFree ? '0' : String(lineItem.amountDDFC)
                                     )
                                   }

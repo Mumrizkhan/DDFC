@@ -9,7 +9,7 @@ public class Package : BaseEntity
     public PlotSize PlotSize { get; set; }
     public PackageTier PackageTier { get; set; }
     public PackageCategory PackageCategory { get; set; } = PackageCategory.HouseDesign;
-    public DesignType DesignType { get; set; } = DesignType.DdfcInclusive;
+    public DesignType DesignType { get; set; } = DesignType.InclusiveDesign;
     public bool IsActive { get; set; } = true;
     public int Version { get; set; } = 1;
 

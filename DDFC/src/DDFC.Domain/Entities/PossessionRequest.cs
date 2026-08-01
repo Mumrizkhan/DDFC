@@ -19,7 +19,7 @@ public class PossessionRequest : BaseEntity
     public string MembershipDPRNo { get; set; } = string.Empty;
     public string OwnerTitle { get; set; } = "Mr";             // Mr/Mrs/Miss
     public string OwnerName { get; set; } = string.Empty;      // Registered owner full name
-    public string GuardianName { get; set; } = string.Empty;   // S/o D/o W/o
+    public string SonDaughterWifeOf { get; set; } = string.Empty;
     public string GuardianRelation { get; set; } = "S/o";
     public string? Contractor { get; set; }
 
@@ -33,6 +33,7 @@ public class PossessionRequest : BaseEntity
     public string? EStampPaperUrl { get; set; }
     public string? AuthorizedPersonCnicUrl { get; set; }
     public string? AuthorizedPersonPhone { get; set; }
+    public string? AuthorizedPersonName { get; set; }
 
     public PossessionRequestStatus Status { get; set; } = PossessionRequestStatus.Submitted;
     public RequestType RequestType { get; set; } = RequestType.PossessionDesign;

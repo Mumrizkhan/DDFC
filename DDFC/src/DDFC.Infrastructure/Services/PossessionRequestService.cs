@@ -85,8 +85,9 @@ public class PossessionRequestService : IPossessionRequestService
             MembershipDPRNo = dto.MembershipDPRNo,
             OwnerTitle = dto.OwnerTitle,
             OwnerName = dto.OwnerName,
-            GuardianName = dto.GuardianName,
+            SonDaughterWifeOf = dto.SonDaughterWifeOf,
             GuardianRelation = dto.GuardianRelation,
+            AuthorizedPersonName = dto.AuthorizedPersonName,
             Contractor = dto.Contractor,
             RequestType = dto.RequestType,
             Status = PossessionRequestStatus.Submitted
