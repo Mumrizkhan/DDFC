@@ -19,3 +19,4 @@
 # OS
 Thumbs.db
 .DS_Store
+/DDFC/src/DDFC.API/uploads
