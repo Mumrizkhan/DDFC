@@ -8,6 +8,48 @@ interface WorkflowTimelineProps {
   showActor?: boolean;
 }
 
+const formatActionLabel = (entry: WorkflowHistoryEntry) => {
+  const rawAction = entry.actionBy ?? '';
+
+  const actionMap: Record<string, string> = {
+    ApproveTransfer: 'Transfer Branch – NOC/NDC Review • Approve Transfer',
+    RejectTransfer: 'Transfer Branch – NOC/NDC Review • Reject Transfer',
+    TransferClarificationRequested: 'Transfer Branch – NOC/NDC Review • Request Clarification',
+    ApproveFinance: 'Finance Branch – Dues Clearance • Approve Finance',
+    RejectFinance: 'Finance Branch – Dues Clearance • Reject Finance',
+    BcdUploadPossessionLetter: 'BCD – Upload Possession Letter • Upload Possession Letter',
+    DdfcAdminSign: 'DDFC Admin – Sign Possession Letter • Sign Possession Letter',
+    CompleteThreeD: '3D Visualization • Finalize 3D Visualization',
+    Upload3DDraft: 'Architect • Upload 3D Draft',
+    SelectPackage: 'Reception – Package Selection • Select Package',
+    ConfirmPayment: 'Reception – Payment Confirmation • Confirm Payment',
+    PrincipalApprove: 'Principal Architect • Approve Designs',
+    FinalApprove: 'DHA Design Head • Final Approve',
+    DeliverDocuments: 'Document Delivery • Deliver Documents',
+    CreateRequest: 'Request Created',
+    InitiateRequest: 'Request Submitted',
+    VerifyDocuments: 'Documents Verified',
+    DocumentsIncomplete: 'Documents Incomplete',
+    TransferReject: 'Transfer Branch – NOC/NDC Review • Transfer Rejected',
+    FinanceReject: 'Finance Branch – Dues Clearance • Finance Rejected',
+    AdminReviewIncomplete: 'Admin Review • Marked Incomplete',
+    AdminReviewReject: 'Admin Review • Rejected',
+    AdminReviewInitiate: 'Admin Review • Documents Verification',
+  };
+
+  if (actionMap[rawAction]) return actionMap[rawAction];
+
+  if (rawAction) {
+    return rawAction
+      .replace(/([a-z])([A-Z])/g, '$1 $2')
+      .replace(/_/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  return `Workflow update: ${entry.toStatus}`;
+};
+
 export const WorkflowTimeline: React.FC<WorkflowTimelineProps> = ({
   history,
   showActor = true,
@@ -27,16 +69,27 @@ export const WorkflowTimeline: React.FC<WorkflowTimelineProps> = ({
               <div>
                 <span className="h-8 w-8 rounded-full bg-blue-500 flex items-center justify-center ring-8 ring-white">
                   <span className="text-white text-xs font-bold">
-                    {(entry.toStatus || 'S').charAt(0)}
+                    {formatActionLabel(entry).charAt(0).toUpperCase() || 'W'}
                   </span>
                 </span>
               </div>
               <div className="flex min-w-0 flex-1 justify-between space-x-4 pt-1.5">
                 <div>
                   <p className="text-sm text-gray-800">
-                    Status changed to{' '}
-                    <Badge variant="info">{entry.toStatus}</Badge>
+                    {formatActionLabel(entry)}
                   </p>
+                  {entry.toStatus && entry.toStatus !== 'BothBranchesCleared' && (
+                    <div className="mt-1">
+                      <Badge variant="info">
+                        {entry.actionBy === 'VerifyDocuments' && entry.toStatus === 'DocumentsVerification'
+                          ? 'Documents Verified'
+                          : entry.toStatus === 'PrincipalArchitectReviewPending' ||
+                            (entry.actionBy === 'CompleteMEP' && entry.toStatus === 'PrincipalArchitectApproved')
+                            ? 'Principal Architect Review Pending'
+                          : entry.toStatus}
+                      </Badge>
+                    </div>
+                  )}
                   {entry.comments && (
                     <p className="mt-1 text-sm text-gray-500 italic">
                       "{entry.comments}"

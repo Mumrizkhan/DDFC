@@ -25,10 +25,12 @@ export const MepPanel: React.FC<Props> = ({ requestId, request }) => {
     if (!fileUrl.trim()) return;
     setLoading(true);
     try {
-      await dispatch(
+      const updatedRequest = await dispatch(
         mepComplete({ id: requestId, data: { fileUrl: fileUrl.trim(), observations: observations.trim() || undefined } })
       ).unwrap();
-      toast.success('MEP review marked complete');
+      toast.success(updatedRequest.mepCompleted
+        ? 'MEP Review and CAD submitted — sent to Principal Architect Review'
+        : 'MEP Review saved — awaiting MEP CAD');
       setFileUrl('');
       setObservations('');
     } catch {

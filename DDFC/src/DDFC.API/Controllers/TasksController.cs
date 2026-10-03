@@ -203,6 +203,21 @@ public class TasksController : ControllerBase
     private Guid GetStaffId() => Guid.Parse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)!.Value);
 }
 
-public record ReassignDto(Guid NewUserId, string Reason);
-public record AssignDto(Guid EmployeeId, string? Reason);
-public record AvailabilityDto(bool IsAvailable, string? Reason, DateTime? UnavailableUntil);
+public class ReassignDto
+{
+    public Guid NewUserId { get; set; }
+    public string Reason { get; set; } = string.Empty;
+}
+
+public class AssignDto
+{
+    public Guid EmployeeId { get; set; }
+    public string? Reason { get; set; }
+}
+
+public class AvailabilityDto
+{
+    public bool IsAvailable { get; set; }
+    public string? Reason { get; set; }
+    public DateTime? UnavailableUntil { get; set; }
+}

@@ -45,4 +45,7 @@ public class PackagesController : ControllerBase
     }
 }
 
-public record UpdatePackageDto(List<PackageLineItemDto> LineItems);
+public class UpdatePackageDto
+{
+    public List<PackageLineItemDto> LineItems { get; set; } = new();
+}

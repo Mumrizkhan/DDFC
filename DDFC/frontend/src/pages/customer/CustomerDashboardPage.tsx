@@ -75,7 +75,7 @@ export const CustomerDashboardPage: React.FC = () => {
               {latestRequest.requestId}
             </span>
           </p>
-          <WorkflowStepper currentStatus={latestRequest.status} />
+          <WorkflowStepper currentStatus={latestRequest.status} requestType={latestRequest.requestType} />
         </Card>
       )}
 

@@ -296,6 +296,9 @@ namespace DDFC.Infrastructure.Migrations.Workflow
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
 
+                    b.Property<bool>("IsLoopbackAction")
+                        .HasColumnType("bit");
+
                     b.Property<bool>("IsRejectionAction")
                         .HasColumnType("bit");
 

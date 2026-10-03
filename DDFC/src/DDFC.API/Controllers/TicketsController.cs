@@ -137,8 +137,31 @@ public class TicketsController : ControllerBase
     private Guid GetDepartmentId()=> Guid.Parse(User.FindFirst("departmentId")!.Value);
 }
 
-public record CreateTicketDto(Guid? RequestId, string Subject, TicketCategory Category, string Description);
-public record ReplyDto(string Message, string? AttachmentUrl);
-public record CloseTicketDto(int? SatisfactionRating);
-public record AssignTicketDto(Guid DepartmentId);
-public record AssignUserDto(Guid UserId);
+public class CreateTicketDto
+{
+    public Guid? RequestId { get; set; }
+    public string Subject { get; set; } = string.Empty;
+    public TicketCategory Category { get; set; }
+    public string Description { get; set; } = string.Empty;
+}
+
+public class ReplyDto
+{
+    public string Message { get; set; } = string.Empty;
+    public string? AttachmentUrl { get; set; }
+}
+
+public class CloseTicketDto
+{
+    public int? SatisfactionRating { get; set; }
+}
+
+public class AssignTicketDto
+{
+    public Guid DepartmentId { get; set; }
+}
+
+public class AssignUserDto
+{
+    public Guid UserId { get; set; }
+}

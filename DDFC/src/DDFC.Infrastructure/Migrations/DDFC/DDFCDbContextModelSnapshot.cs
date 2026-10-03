@@ -517,6 +517,9 @@ namespace DDFC.Infrastructure.Migrations.DDFC
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
 
+                    b.Property<bool>("IsSignedByAdmin")
+                        .HasColumnType("bit");
+
                     b.Property<Guid>("RequestId")
                         .HasColumnType("uniqueidentifier");
 

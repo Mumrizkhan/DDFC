@@ -96,7 +96,7 @@ export const RequestDetailPage: React.FC = () => {
         <div>
           <div className="flex items-center gap-3">
             <h1 className="text-xl font-bold font-mono text-gray-900">{req.requestId}</h1>
-            <StatusBadge status={req.status} />
+            <StatusBadge status={req.status} activeStepNames={req.activeWorkflowStepNames} />
           </div>
           <p className="text-sm text-gray-400">
             Submitted {format(new Date(req.submittedAt), 'dd MMM yyyy')}
@@ -105,7 +105,7 @@ export const RequestDetailPage: React.FC = () => {
       </div>
 
       {/* Workflow Stepper */}
-      <WorkflowStepper currentStatus={req.status} />
+      <WorkflowStepper currentStatus={req.status} requestType={req.requestType} />
 
       {/* Delay Undertaking – shown when customer action is needed */}
       {(req.status === 'PossessionLetterSigned' || req.status === 'DelayUndertakingRequested') && (

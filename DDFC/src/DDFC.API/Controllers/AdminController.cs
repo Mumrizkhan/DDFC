@@ -462,25 +462,111 @@ public class AdminController : ControllerBase
 }
 
 // ── DTOs ──────────────────────────────────────────────────────────────────────
-public record CreateUserDto(string FullName, string Email, string Password, Guid RoleId, Guid DepartmentId);
-public record UpdateUserDto(string? FullName, Guid? RoleId, Guid? DepartmentId, bool? IsActive, string? NewPassword);
-public record CustomerDto(string CustomerId, string FullName, string Cnic, string PhoneNumber, string? Email, string? Address, string CreatedAt);
-public record CreateCustomerDto(string FullName, string Cnic, string PhoneNumber, string? Email);
-public record CreateDeptDto(string Name, string Code);
-public record UpdateDeptDto(string? Name, string? Code);
-public record UpdatePermissionsDto(string Permissions);
-public record CreatePlotDto(
-    string PlotNumber, string SectorNo, string? StreetNo, string? PhaseNo,
-    DDFC.Domain.Enums.PlotSize PlotSize, DDFC.Domain.Enums.PlotType PlotType);
-public record StaffUserDto(
-    Guid    UserId,
-    string  FullName,
-    string  Email,
-    string? RoleName,
-    Guid?   RoleId,
-    Guid?   DepartmentId,
-    string? DepartmentName,
-    bool    IsActive,
-    bool    IsAvailable,
-    DateTime? LastLogin,
-    DateTime  CreatedAt);
+public class CreateUserDto
+{
+    public string FullName { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
+    public string Password { get; set; } = string.Empty;
+    public Guid RoleId { get; set; }
+    public Guid DepartmentId { get; set; }
+}
+
+public class UpdateUserDto
+{
+    public string? FullName { get; set; }
+    public Guid? RoleId { get; set; }
+    public Guid? DepartmentId { get; set; }
+    public bool? IsActive { get; set; }
+    public string? NewPassword { get; set; }
+}
+
+public class CustomerDto
+{
+    public string CustomerId { get; set; } = string.Empty;
+    public string FullName { get; set; } = string.Empty;
+    public string Cnic { get; set; } = string.Empty;
+    public string PhoneNumber { get; set; } = string.Empty;
+    public string? Email { get; set; }
+    public string? Address { get; set; }
+    public string CreatedAt { get; set; } = string.Empty;
+
+    public CustomerDto() { }
+
+    public CustomerDto(string customerId, string fullName, string cnic, string phoneNumber, string? email, string? address, string createdAt)
+    {
+        CustomerId = customerId;
+        FullName = fullName;
+        Cnic = cnic;
+        PhoneNumber = phoneNumber;
+        Email = email;
+        Address = address;
+        CreatedAt = createdAt;
+    }
+}
+
+public class CreateCustomerDto
+{
+    public string FullName { get; set; } = string.Empty;
+    public string Cnic { get; set; } = string.Empty;
+    public string PhoneNumber { get; set; } = string.Empty;
+    public string? Email { get; set; }
+}
+
+public class CreateDeptDto
+{
+    public string Name { get; set; } = string.Empty;
+    public string Code { get; set; } = string.Empty;
+}
+
+public class UpdateDeptDto
+{
+    public string? Name { get; set; }
+    public string? Code { get; set; }
+}
+
+public class UpdatePermissionsDto
+{
+    public string Permissions { get; set; } = string.Empty;
+}
+
+public class CreatePlotDto
+{
+    public string PlotNumber { get; set; } = string.Empty;
+    public string SectorNo { get; set; } = string.Empty;
+    public string? StreetNo { get; set; }
+    public string? PhaseNo { get; set; }
+    public DDFC.Domain.Enums.PlotSize PlotSize { get; set; }
+    public DDFC.Domain.Enums.PlotType PlotType { get; set; }
+}
+
+public class StaffUserDto
+{
+    public Guid UserId { get; set; }
+    public string FullName { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
+    public string? RoleName { get; set; }
+    public Guid? RoleId { get; set; }
+    public Guid? DepartmentId { get; set; }
+    public string? DepartmentName { get; set; }
+    public bool IsActive { get; set; }
+    public bool IsAvailable { get; set; }
+    public DateTime? LastLogin { get; set; }
+    public DateTime CreatedAt { get; set; }
+
+    public StaffUserDto() { }
+
+    public StaffUserDto(Guid userId, string fullName, string email, string? roleName, Guid? roleId, Guid? departmentId, string? departmentName, bool isActive, bool isAvailable, DateTime? lastLogin, DateTime createdAt)
+    {
+        UserId = userId;
+        FullName = fullName;
+        Email = email;
+        RoleName = roleName;
+        RoleId = roleId;
+        DepartmentId = departmentId;
+        DepartmentName = departmentName;
+        IsActive = isActive;
+        IsAvailable = isAvailable;
+        LastLogin = lastLogin;
+        CreatedAt = createdAt;
+    }
+}

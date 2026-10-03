@@ -13,4 +13,5 @@ public class Document : BaseEntity
     public Guid UploadedBy { get; set; }
     public DateTime UploadedAt { get; set; } = DateTime.UtcNow;
     public bool IsArchived { get; set; } = false;
+    public bool IsSignedByAdmin { get; set; } = false;
 }

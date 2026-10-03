@@ -127,6 +127,30 @@ export const financeReject = createAsyncThunk(
   }
 );
 
+export const adCoordApprove = createAsyncThunk(
+  'requests/adCoordApprove',
+  async ({ id, comments }: { id: string; comments?: string }, { rejectWithValue }) => {
+    try {
+      await requestsService.adCoordApprove(id, { comments });
+      return await requestsService.getById(id);
+    } catch (err) {
+      return rejectWithValue((err as { message: string }).message);
+    }
+  }
+);
+
+export const adCoordReject = createAsyncThunk(
+  'requests/adCoordReject',
+  async ({ id, comments }: { id: string; comments?: string }, { rejectWithValue }) => {
+    try {
+      await requestsService.adCoordReject(id, { comments });
+      return await requestsService.getById(id);
+    } catch (err) {
+      return rejectWithValue((err as { message: string }).message);
+    }
+  }
+);
+
 export const approvePlan = createAsyncThunk(
   'requests/approvePlan',
   async ({ requestId, planId }: { requestId: string; planId: string }, { rejectWithValue }) => {
@@ -154,6 +178,18 @@ export const requestPlanRevision = createAsyncThunk(
   }
 );
 
+export const bcdUploadPossessionLetter = createAsyncThunk(
+  'requests/bcdUploadPossessionLetter',
+  async ({ id, fileUrl, comments }: { id: string; fileUrl: string; comments?: string }, { rejectWithValue }) => {
+    try {
+      await requestsService.bcdUploadPossessionLetter(id, { fileUrl, comments });
+      return await requestsService.getById(id);
+    } catch (err) {
+      return rejectWithValue((err as { message: string }).message);
+    }
+  }
+);
+
 export const ddfcAdminSign = createAsyncThunk(
   'requests/ddfcAdminSign',
   async (payload: {
@@ -164,6 +200,7 @@ export const ddfcAdminSign = createAsyncThunk(
     takenOverDate?: string;
     chiefSurveyorName?: string;
     adTpBcdName?: string;
+    possessionLetterFileUrl?: string;
   }, { rejectWithValue }) => {
     try {
       const { id, ...certData } = payload;
@@ -327,6 +364,37 @@ export const confirmPayment = createAsyncThunk(
   }
 );
 
+export const submitPaymentChallan = createAsyncThunk(
+  'requests/submitPaymentChallan',
+  async (
+    { id, data }: { id: string; data: { challanNo: string; scannedChallanFileUrl: string } },
+    { rejectWithValue }
+  ) => {
+    try {
+      await requestsService.submitPaymentChallan(id, data);
+      return await requestsService.getById(id);
+    } catch (err) {
+      return rejectWithValue((err as { message: string }).message);
+    }
+  }
+);
+
+export const approvePayment = createAsyncThunk(
+  'requests/approvePayment',
+  async (
+    { id, amountPaid }: { id: string; amountPaid?: number },
+    { rejectWithValue }
+  ) => {
+    try {
+      await requestsService.approvePayment(id, amountPaid != null ? { amountPaid } : undefined);
+      return await requestsService.getById(id);
+    } catch (err) {
+      return rejectWithValue((err as { message: string }).message);
+    }
+  }
+);
+
+
 export const uploadPlan = createAsyncThunk(
   'requests/uploadPlan',
   async (
@@ -438,6 +506,23 @@ export const principalApprove = createAsyncThunk(
   }
 );
 
+export const submitInitialSoilTest = createAsyncThunk(
+  'requests/submitInitialSoilTest',
+  async (
+    { id, data }: { id: string; data: {
+      testDate: string; labName: string; soilBearingCapacity: string;
+      resultSummary: string; reportFileUrl: string;
+    }},
+    { rejectWithValue }
+  ) => {
+    try {
+      return await requestsService.submitInitialSoilTest(id, data);
+    } catch (err) {
+      return rejectWithValue((err as { message: string }).message);
+    }
+  }
+);
+
 export const paInitialReview = createAsyncThunk(
   'requests/paInitialReview',
   async (
@@ -508,6 +593,18 @@ export const submitBuildingControl = createAsyncThunk(
   }
 );
 
+export const completeBuildingControl = createAsyncThunk(
+  'requests/completeBuildingControl',
+  async (id: string, { rejectWithValue }) => {
+    try {
+      await requestsService.completeBuildingControl(id);
+      return await requestsService.getById(id);
+    } catch (error) {
+      return rejectWithValue((error as { message: string }).message);
+    }
+  }
+);
+
 export const finalApprove = createAsyncThunk(
   'requests/finalApprove',
   async ({ id, comments }: { id: string; comments?: string }, { rejectWithValue }) => {
@@ -544,6 +641,21 @@ export const deliverRequest = createAsyncThunk(
   }
 );
 
+export const attachDocument = createAsyncThunk(
+  'requests/attachDocument',
+  async (
+    { id, documentType, fileUrl }: { id: string; documentType: string; fileUrl: string },
+    { rejectWithValue }
+  ) => {
+    try {
+      await requestsService.attachDocument(id, { documentType, fileUrl });
+      return await requestsService.getById(id);
+    } catch (err) {
+      return rejectWithValue((err as { message: string }).message);
+    }
+  }
+);
+
 export const rejectRequest = createAsyncThunk(
   'requests/rejectRequest',
   async ({ id, comments }: { id: string; comments?: string }, { rejectWithValue }) => {
@@ -563,6 +675,7 @@ export const adminReview = createAsyncThunk(
     data: {
       action: string;
       rejectionReason?: string;
+      incompleteDocumentType?: string;
       allotmentLetterUrl?: string;
       cnicUrl?: string;
       messageScreenshotUrl?: string;
@@ -580,11 +693,40 @@ export const adminReview = createAsyncThunk(
   }
 );
 
+export const verifyDocuments = createAsyncThunk(
+  'requests/verifyDocuments',
+  async ({ id, action, comments }: { id: string; action: 'Approve' | 'Incomplete'; comments?: string }, { rejectWithValue }) => {
+    try {
+      await requestsService.verifyDocuments(id, { action, comments });
+      return await requestsService.getById(id);
+    } catch (err) {
+      return rejectWithValue((err as { message: string }).message);
+    }
+  }
+);
+
 export const initiateRequest = createAsyncThunk(
   'requests/initiateRequest',
   async ({ id, comments }: { id: string; comments?: string }, { rejectWithValue }) => {
     try {
       await requestsService.initiateRequest(id, { comments });
+      return await requestsService.getById(id);
+    } catch (err) {
+      return rejectWithValue((err as { message: string }).message);
+    }
+  }
+);
+
+export const issuePossessionCert = createAsyncThunk(
+  'requests/issuePossessionCert',
+  async ({ id, ...data }: {
+    id: string;
+    handedOverBy?: string; handedOverDate?: string;
+    takenOverBy?: string; takenOverDate?: string;
+    chiefSurveyorName?: string; adTpBcdName?: string;
+  }, { rejectWithValue }) => {
+    try {
+      await requestsService.issuePossessionCert(id, data);
       return await requestsService.getById(id);
     } catch (err) {
       return rejectWithValue((err as { message: string }).message);
@@ -658,16 +800,18 @@ const requestsSlice = createSlice({
     // Workflow actions
     const workflowCases = [
       transferApprove, transferReject, transferClarification,
-      financeApprove, financeReject, approvePlan, requestPlanRevision,
+      financeApprove, financeReject, adCoordApprove, adCoordReject, approvePlan, requestPlanRevision,
       ddfcAdminSign, requestDelayUndertaking, signDelayUndertaking, skipDelayUndertaking,
       attachSignedUndertaking, requestAnnexation, requestPlotMerge,
       assignCadOperator, submitDeptCadFile,
       selectPackage, confirmPayment, uploadPlan,
+      submitPaymentChallan, approvePayment,
       threeDUploadFile, threeDComplete,
       cadUploadFile, cadComplete,
-      structureComplete, mepComplete, principalApprove, principalSendBack, paInitialReview,
-      uploadSoilTest, submitBuildingControl,
+      structureComplete, mepComplete, principalApprove, principalSendBack, paInitialReview, submitInitialSoilTest,
+      uploadSoilTest, submitBuildingControl, completeBuildingControl,
       finalApprove, finalReject, deliverRequest, rejectRequest, initiateRequest, adminReview,
+      attachDocument, issuePossessionCert,
     ];
     workflowCases.forEach((thunk) => {
       builder

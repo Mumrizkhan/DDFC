@@ -223,28 +223,28 @@ public class AppointmentsController : ControllerBase
             .FirstOrDefaultAsync(a => a.Id == id);
 
     private static AppointmentDto MapToDto(Appointment a) => new(
-        Id:                 a.Id,
-        CustomerId:         a.CustomerId,
-        CustomerName:       a.Customer?.FullName,
-        CustomerPhone:      a.Customer?.PhoneNumber,
-        RequestId:          a.RequestId,
-        RequestCode:        a.Request?.RequestId,
-        DepartmentId:       a.DepartmentId,
-        DepartmentName:     a.Department?.DepartmentName,
-        AssignedEmployeeId: a.AssignedEmployeeId,
-        AssignedEmployeeName: a.AssignedEmployee?.FullName,
-        AppointmentDate:    a.AppointmentDate.ToString("yyyy-MM-dd"),
-        StartTime:          a.StartTime.ToString(@"hh\:mm"),
-        DurationMinutes:    a.DurationMinutes,
-        NumberOfPersons:    a.NumberOfPersons,
-        AttendeeNames:      a.AttendeeNames,
-        BookingMethod:      a.BookingMethod.ToString(),
-        BookedByName:       a.BookedByUser?.FullName,
-        Status:             a.Status.ToString(),
-        Purpose:            a.Purpose,
-        Notes:              a.Notes,
-        CancellationReason: a.CancellationReason,
-        CreatedAt:          a.CreatedAt
+        a.Id,
+        a.CustomerId,
+        a.Customer?.FullName,
+        a.Customer?.PhoneNumber,
+        a.RequestId,
+        a.Request?.RequestId,
+        a.DepartmentId,
+        a.Department?.DepartmentName,
+        a.AssignedEmployeeId,
+        a.AssignedEmployee?.FullName,
+        a.AppointmentDate.ToString("yyyy-MM-dd"),
+        a.StartTime.ToString(@"hh\:mm"),
+        a.DurationMinutes,
+        a.NumberOfPersons,
+        a.AttendeeNames,
+        a.BookingMethod.ToString(),
+        a.BookedByUser?.FullName,
+        a.Status.ToString(),
+        a.Purpose,
+        a.Notes,
+        a.CancellationReason,
+        a.CreatedAt
     );
 
     private Guid GetCurrentUserId()
@@ -256,43 +256,82 @@ public class AppointmentsController : ControllerBase
 }
 
 // ── DTOs ──────────────────────────────────────────────────────────────────────
-public record BookAppointmentDto(
-    Guid                      CustomerId,
-    Guid?                     RequestId,
-    Guid                      DepartmentId,
-    Guid?                     AssignedEmployeeId,
-    string                    AppointmentDate,
-    string                    StartTime,
-    int                       DurationMinutes,
-    int                       NumberOfPersons,
-    string?                   AttendeeNames,
-    AppointmentBookingMethod  BookingMethod,
-    string?                   Purpose,
-    string?                   Notes);
+public class BookAppointmentDto
+{
+    public Guid CustomerId { get; set; }
+    public Guid? RequestId { get; set; }
+    public Guid DepartmentId { get; set; }
+    public Guid? AssignedEmployeeId { get; set; }
+    public string AppointmentDate { get; set; } = string.Empty;
+    public string StartTime { get; set; } = string.Empty;
+    public int DurationMinutes { get; set; }
+    public int NumberOfPersons { get; set; }
+    public string? AttendeeNames { get; set; }
+    public AppointmentBookingMethod BookingMethod { get; set; }
+    public string? Purpose { get; set; }
+    public string? Notes { get; set; }
+}
 
-public record AppointmentNoteDto(string? Notes);
-public record AssignEmployeeDto(Guid? EmployeeId);
+public class AppointmentNoteDto
+{
+    public string? Notes { get; set; }
+}
 
-public record AppointmentDto(
-    Guid      Id,
-    Guid      CustomerId,
-    string?   CustomerName,
-    string?   CustomerPhone,
-    Guid?     RequestId,
-    string?   RequestCode,
-    Guid      DepartmentId,
-    string?   DepartmentName,
-    Guid?     AssignedEmployeeId,
-    string?   AssignedEmployeeName,
-    string    AppointmentDate,
-    string    StartTime,
-    int       DurationMinutes,
-    int       NumberOfPersons,
-    string?   AttendeeNames,
-    string    BookingMethod,
-    string?   BookedByName,
-    string    Status,
-    string?   Purpose,
-    string?   Notes,
-    string?   CancellationReason,
-    DateTime  CreatedAt);
+public class AssignEmployeeDto
+{
+    public Guid? EmployeeId { get; set; }
+}
+
+public class AppointmentDto
+{
+    public Guid Id { get; set; }
+    public Guid CustomerId { get; set; }
+    public string? CustomerName { get; set; }
+    public string? CustomerPhone { get; set; }
+    public Guid? RequestId { get; set; }
+    public string? RequestCode { get; set; }
+    public Guid DepartmentId { get; set; }
+    public string? DepartmentName { get; set; }
+    public Guid? AssignedEmployeeId { get; set; }
+    public string? AssignedEmployeeName { get; set; }
+    public string AppointmentDate { get; set; } = string.Empty;
+    public string StartTime { get; set; } = string.Empty;
+    public int DurationMinutes { get; set; }
+    public int NumberOfPersons { get; set; }
+    public string? AttendeeNames { get; set; }
+    public string BookingMethod { get; set; } = string.Empty;
+    public string? BookedByName { get; set; }
+    public string Status { get; set; } = string.Empty;
+    public string? Purpose { get; set; }
+    public string? Notes { get; set; }
+    public string? CancellationReason { get; set; }
+    public DateTime CreatedAt { get; set; }
+
+    public AppointmentDto() { }
+
+    public AppointmentDto(Guid id, Guid customerId, string? customerName, string? customerPhone, Guid? requestId, string? requestCode, Guid departmentId, string? departmentName, Guid? assignedEmployeeId, string? assignedEmployeeName, string appointmentDate, string startTime, int durationMinutes, int numberOfPersons, string? attendeeNames, string bookingMethod, string? bookedByName, string status, string? purpose, string? notes, string? cancellationReason, DateTime createdAt)
+    {
+        Id = id;
+        CustomerId = customerId;
+        CustomerName = customerName;
+        CustomerPhone = customerPhone;
+        RequestId = requestId;
+        RequestCode = requestCode;
+        DepartmentId = departmentId;
+        DepartmentName = departmentName;
+        AssignedEmployeeId = assignedEmployeeId;
+        AssignedEmployeeName = assignedEmployeeName;
+        AppointmentDate = appointmentDate;
+        StartTime = startTime;
+        DurationMinutes = durationMinutes;
+        NumberOfPersons = numberOfPersons;
+        AttendeeNames = attendeeNames;
+        BookingMethod = bookingMethod;
+        BookedByName = bookedByName;
+        Status = status;
+        Purpose = purpose;
+        Notes = notes;
+        CancellationReason = cancellationReason;
+        CreatedAt = createdAt;
+    }
+}

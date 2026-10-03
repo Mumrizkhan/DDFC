@@ -37,6 +37,8 @@ export type UserRole =
   | 'TownPlanner'
   | 'BuildingControlOfficer'
   | 'Architect'
+  | '3D Engineer'
+  | '3D Operator'
   | 'StructureEngineer'
   | 'MEPEngineer'
   | 'PrincipalArchitect'
@@ -70,23 +72,30 @@ export interface Customer {
 
 export type RequestStatus =
   | 'Submitted'
-  | 'Initiated'
+  | 'DocumentsVerification'
   | 'TransferApproved'
   | 'FinanceApproved'
   | 'BothBranchesCleared'
+  | 'AdminReviewPending'
+  | 'AdCoordApproved'
+  | 'BcdLetterUploaded'
   | 'PossessionIssued'
   | 'PossessionLetterSigned'
   | 'DelayUndertakingRequested'
   | 'DelayUndertakingSigned'
   | 'PackageSelected'
   | 'PackagePaid'
+  | 'SoilTestCompleted'
   | 'ArchitectAssigned'
   | 'ArchitectureApproved'
   | 'ThreeDCompleted'
+  | 'ThreeDDraftPending'
+  | 'ThreeDDraftUploaded'
   | 'CadCompleted'
   | 'StructureCompleted'
   | 'MEPCompleted'
   | 'PrincipalArchitectApproved'
+  | 'PrincipalArchitectReviewPending'
   | 'TownPlanningCompleted'
   | 'BuildingControlCompleted'
   | 'FinalApproved'
@@ -108,6 +117,21 @@ export type TicketCategory =
   | 'GeneralEnquiry'
   | 'Complaint';
 
+export type DocumentType =
+  | 'Cnic'
+  | 'NocNdcForm'
+  | 'AllotmentLetter'
+  | 'PlotFinanceStatement'
+  | 'Other';
+
+export const DOCUMENT_TYPE_LABELS: Record<DocumentType, string> = {
+  Cnic:                 'CNIC',
+  NocNdcForm:           'NOC/NDC Form',
+  AllotmentLetter:      'Allotment Letter',
+  PlotFinanceStatement: 'Plot Finance Statement',
+  Other:                'Other',
+};
+
 // ─── Plot ────────────────────────────────────────────────────────────────────
 
 export interface Plot {
@@ -128,6 +152,7 @@ export interface RequestDocument {
   documentType: string;
   fileUrl: string;
   uploadedAt: string;
+  isSignedByAdmin?: boolean;
 }
 
 export interface Payment {
@@ -171,7 +196,7 @@ export interface CadFile {
 
 // ─── Per-Department CAD Assignment ───────────────────────────────────────────
 
-export type CadType = 'Architecture' | 'ThreeD' | 'Structure' | 'MEP';
+export type CadType = 'Architecture' | 'ThreeD' | 'ArchitectDraft' | 'Structure' | 'MEP';
 
 export interface CadAssignment {
   id: string;

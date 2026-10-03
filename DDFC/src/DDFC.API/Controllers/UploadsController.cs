@@ -19,10 +19,10 @@ public class UploadsController : ControllerBase
         if (file == null || file.Length == 0)
             return BadRequest(new { message = "No file provided" });
 
-        var allowedExtensions = new[] { ".pdf", ".jpg", ".jpeg", ".png" };
+        var allowedExtensions = new[] { ".pdf", ".jpg", ".jpeg", ".png", ".skp", ".dwg" };
         var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
         if (!allowedExtensions.Contains(ext))
-            return BadRequest(new { message = "Only PDF, JPG, and PNG files are allowed" });
+            return BadRequest(new { message = "Only PDF, JPG, PNG, SKP, and DWG files are allowed" });
 
         var uploadDir = Path.Combine(_env.ContentRootPath, "uploads");
         Directory.CreateDirectory(uploadDir);

@@ -10,8 +10,10 @@ import type { CadType, PossessionRequest } from '../../types';
 import api from '../../services/api';
 
 interface StaffUser {
-  id: string;
+  userId: string;
   fullName: string;
+  roleName?: string;
+  departmentName?: string;
 }
 
 interface Props {
@@ -19,6 +21,7 @@ interface Props {
   label: string;
   requestId: string;
   request: PossessionRequest;
+  assigneeRole?: 'Architect' | '3D Operator';
   /** Tailwind border+bg class for the section card, e.g. 'border-blue-200 bg-blue-50' */
   accentClass?: string;
 }
@@ -28,6 +31,7 @@ export const CadSection: React.FC<Props> = ({
   label,
   requestId,
   request,
+  assigneeRole,
   accentClass = 'border-orange-200 bg-orange-50',
 }) => {
   const dispatch = useAppDispatch();
@@ -45,17 +49,31 @@ export const CadSection: React.FC<Props> = ({
       .get<StaffUser[] | { users: StaffUser[] }>('/admin/users')
       .then((r) => {
         const raw = r.data;
-        setUsers(Array.isArray(raw) ? raw : (raw as { users: StaffUser[] }).users ?? []);
+        const allUsers = Array.isArray(raw) ? raw : (raw as { users: StaffUser[] }).users ?? [];
+        const eligibleUsers = allUsers.filter((u) => {
+          const role = (u.roleName ?? '').toLowerCase();
+          if (assigneeRole) return role === assigneeRole.toLowerCase();
+          const dept = (u.departmentName ?? '').toLowerCase();
+          return role === '3d operator' || dept.includes('3d') || dept.includes('three d');
+        });
+        setUsers(eligibleUsers);
       })
       .catch(() => {});
-  }, []);
+  }, [assigneeRole]);
 
   const handleAssign = async () => {
-    if (!selectedUserId) { toast.error('Please select a CAD operator'); return; }
+    const candidateId = selectedUserId?.trim();
+    const validGuid = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/; 
+
+    if (!candidateId || !validGuid.test(candidateId)) {
+      toast.error('Please select a valid CAD operator');
+      return;
+    }
+
     setAssigning(true);
     try {
       await dispatch(
-        assignCadOperator({ id: requestId, data: { cadType, assignedUserId: selectedUserId } })
+        assignCadOperator({ id: requestId, data: { cadType, assignedUserId: candidateId } })
       ).unwrap();
       toast.success(`${label} assigned`);
       setSelectedUser('');
@@ -67,6 +85,7 @@ export const CadSection: React.FC<Props> = ({
   };
 
   const handleSubmitFile = async () => {
+    if (!existing) { toast.error('Assign a person before attaching their file'); return; }
     if (!fileUrl) { toast.error('Please upload a file first'); return; }
     const ext = fileUrl.split('.').pop()?.toLowerCase() ?? 'file';
     setSubmitting(true);
@@ -108,19 +127,21 @@ export const CadSection: React.FC<Props> = ({
           <span className="font-medium text-gray-800">{existing.assignedUserName}</span>
         </div>
       ) : (
-        <p className="text-xs text-gray-400 italic">No CAD operator assigned yet</p>
+        <p className="text-xs text-gray-400 italic">
+          {assigneeRole === 'Architect' ? 'No architect assigned yet' : assigneeRole === '3D Operator' ? 'No drafter assigned yet' : 'No CAD operator assigned yet'}
+        </p>
       )}
 
       {/* ── Assign operator ── */}
       <div className="flex gap-2 items-end">
         <div className="flex-1">
           <Select
-            label="Assign CAD Operator"
+            label={assigneeRole === 'Architect' ? 'Assign Architect' : assigneeRole === '3D Operator' ? 'Assign Drafter' : 'Assign CAD Operator'}
             value={selectedUserId}
             onChange={(e) => setSelectedUser(e.target.value)}
             options={[
               { value: '', label: users.length ? '— Select operator —' : 'Loading…' },
-              ...users.map((u) => ({ value: u.id, label: u.fullName })),
+              ...users.map((u) => ({ value: u.userId, label: u.fullName })),
             ]}
           />
         </div>
@@ -159,14 +180,14 @@ export const CadSection: React.FC<Props> = ({
           </div>
         )}
 
-        <FileUploadButton
-          label={`Upload ${label} (.dwg or .pdf)`}
-          accept=".dwg,.pdf"
+        {existing && <FileUploadButton
+          label={assigneeRole ? `Attach ${label} File` : `Upload ${label} (.dwg or .pdf)`}
+          accept={assigneeRole ? '.dwg,.pdf,.jpg,.jpeg,.png,.skp' : '.dwg,.pdf'}
           value={fileUrl}
           onUploaded={setFileUrl}
-        />
+        />}
 
-        {fileUrl && (
+        {existing && fileUrl && (
           <Button
             variant="primary"
             size="sm"

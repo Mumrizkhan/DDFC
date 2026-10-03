@@ -5,9 +5,10 @@ import { Button } from '../../../components/ui/Button';
 import { Input } from '../../../components/ui/Input';
 import { FileUploadButton } from '../../../components/ui/FileUploadButton';
 import type { PossessionRequest, Package as PkgType } from '../../../types';
-import { useAppDispatch } from '../../../store/hooks';
-import { selectPackage, confirmPayment } from '../../../store/slices/requestsSlice';
+import { useAppDispatch, useAppSelector } from '../../../store/hooks';
+import { selectPackage, submitPaymentChallan, approvePayment, deliverRequest, attachDocument, adminReview, initiateRequest } from '../../../store/slices/requestsSlice';
 import { packagesService, requestsService } from '../../../services/endpoints';
+import api from '../../../services/api';
 import { toast } from 'react-toastify';
 
 const TIER_COLORS: Record<string, string> = {
@@ -86,8 +87,9 @@ const uniqueByTier = (pkgs: PkgType[]): PkgType[] => {
 
 export const ReceptionPanel: React.FC<Props> = ({ request, requestId }) => {
   const dispatch = useAppDispatch();
+  const { staffUser } = useAppSelector((s) => s.auth);
 
-  const [designTrack, setDesignTrack] = useState<'InclusiveDesign' | 'ExclusiveDesign'>('InclusiveDesign');
+  const [designTrack, setDesignTrack] = useState<'InclusiveDesign' | 'ExclusiveDesign'>('ExclusiveDesign');
 
   const [houseDesignPkgs,   setHouseDesignPkgs]   = useState<PkgType[]>([]);
   const [interiorPkgs,      setInteriorPkgs]       = useState<PkgType[]>([]);
@@ -103,21 +105,41 @@ export const ReceptionPanel: React.FC<Props> = ({ request, requestId }) => {
   const [challanNo,          setChallanNo]          = useState(request.challanNo ?? '');
   const [scannedFileUrl,     setScannedFileUrl]      = useState('');
   const [paymentSubmitting,  setPaymentSubmitting]   = useState(false);
+  const [approving,          setApproving]           = useState(false);
 
-  const isPossessionIssued = request.status === 'PossessionIssued' ||
-                              request.status === 'PossessionLetterSigned';
-  const isAwaitingPayment  = request.status === 'PackageSelected';
+  const [delivering,       setDelivering]       = useState(false);
+  const [verifyingDocuments, setVerifyingDocuments] = useState(false);
+  const [followUpType, setFollowUpType] = useState<'Cnic' | 'AllotmentLetter' | 'NocNdcForm' | 'MessageScreenshot' | 'EStampPaper' | 'AuthorizedPersonCnic' >('Cnic');
+  const [followUpUrl, setFollowUpUrl] = useState('');
+  const [followUpSubmitting, setFollowUpSubmitting] = useState(false);
+
+  const activeSteps = request.activeWorkflowStepNames ?? [];
+  const isPackageSelectionReady = activeSteps.length > 0
+    ? activeSteps.some((name) => name.toLowerCase().includes('package selection'))
+    : request.status === 'PossessionLetterSigned';
+  const isAwaitingPayment       = request.status === 'PackageSelected';
+  // Challan uploaded by Reception; awaiting Possession Admin approval
+  const isPaymentPendingApproval = request.paymentStatus === 'PendingApproval';
+  const canApprovePayment       = ['Admin', 'Possession Admin', 'DDFC Admin'].includes(staffUser?.roleName ?? '');
+  const isFinalApproved         = request.status === 'FinalApproved';
+  // History is sorted ascending by timestamp, so the last entry is the most recent action.
+  const latestHistoryEntry      = request.workflowHistory?.[request.workflowHistory.length - 1];
+  const isIncompleteFollowUp    = request.status === 'Submitted' &&
+                                 latestHistoryEntry?.actionBy === 'AdminReview-Incomplete';
   const isPaymentDone      = request.status !== 'Submitted' &&
-                              request.status !== 'Initiated' &&
+                              request.status !== 'DocumentsVerification' &&
                               request.status !== 'PossessionIssued' &&
                               request.status !== 'PossessionLetterSigned' &&
+                              request.status !== 'BcdLetterUploaded' &&
                               request.status !== 'BothBranchesCleared' &&
+                              request.status !== 'AdminReviewPending' &&
+                              request.status !== 'AdCoordApproved' &&
                               request.status !== 'TransferApproved' &&
                               request.status !== 'FinanceApproved' &&
                               request.status !== 'PackageSelected';
 
   useEffect(() => {
-    if (!isPossessionIssued) return;
+    if (!isPackageSelectionReady) return;
     const load = async () => {
       setLoadingPkgs(true);
       try {
@@ -145,7 +167,7 @@ export const ReceptionPanel: React.FC<Props> = ({ request, requestId }) => {
       }
     };
     load();
-  }, [isPossessionIssued, request.plotType, request.plotSize, designTrack]);
+  }, [isPackageSelectionReady, request.plotType, request.plotSize, designTrack]);
 
   useEffect(() => {
     if (request.challanNo) setChallanNo(request.challanNo);
@@ -161,11 +183,82 @@ export const ReceptionPanel: React.FC<Props> = ({ request, requestId }) => {
         interiorDesignPackageId:   selectedInteriorPkgId  || undefined,
         supervisionPackageId:      selectedSupervisionPkgId || undefined,
       })).unwrap();
-      toast.success('Package(s) selected — proceed to print & collect payment');
+      toast.success('Package confirmed — request moved to payment step');
+      // Auto-open the print challan popup as the step completion action
+      await handlePrintChallan();
     } catch {
       toast.error('Failed to select package');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handlePrintCertificate = async () => {
+    try {
+      const res = await api.get<string>(`/requests/${requestId}/possession-certificate/preview`, {
+        responseType: 'text',
+      });
+      const win = window.open('', '_blank', 'noopener,noreferrer');
+      if (!win) {
+        toast.warn('Popup blocked — please allow popups and try again');
+        return;
+      }
+      win.document.write(res.data);
+      win.document.close();
+    } catch {
+      toast.error('Failed to load certificate preview');
+    }
+  };
+
+  const handleDeliver = async () => {
+    setDelivering(true);
+    try {
+      await dispatch(deliverRequest({ id: requestId })).unwrap();
+      toast.success('Documents handed over — request marked as Delivered');
+    } catch {
+      toast.error('Failed to mark as delivered');
+    } finally {
+      setDelivering(false);
+    }
+  };
+
+  const handleResubmitIncompleteDocument = async () => {
+    if (!followUpUrl.trim()) {
+      toast.error('Please upload the corrected document first');
+      return;
+    }
+
+    setFollowUpSubmitting(true);
+    try {
+      await dispatch(attachDocument({
+        id: requestId,
+        documentType: followUpType,
+        fileUrl: followUpUrl,
+      })).unwrap();
+
+      const payload: {
+        action: string;
+        allotmentLetterUrl?: string;
+        cnicUrl?: string;
+        messageScreenshotUrl?: string;
+        eStampPaperUrl?: string;
+        authorizedPersonCnicUrl?: string;
+      } = {
+        action: 'Initiate',
+        allotmentLetterUrl: followUpType === 'AllotmentLetter' ? followUpUrl : request.allotmentLetterUrl,
+        cnicUrl: followUpType === 'Cnic' ? followUpUrl : request.cnicUrl,
+        messageScreenshotUrl: followUpType === 'MessageScreenshot' ? followUpUrl : request.messageScreenshotUrl,
+        eStampPaperUrl: followUpType === 'EStampPaper' ? followUpUrl : request.eStampPaperUrl,
+        authorizedPersonCnicUrl: followUpType === 'AuthorizedPersonCnic' ? followUpUrl : request.authorizedPersonCnicUrl,
+      };
+
+      await dispatch(adminReview({ id: requestId, data: payload })).unwrap();
+      toast.success('Document resubmitted and sent for admin review');
+      setFollowUpUrl('');
+    } catch {
+      toast.error('Failed to resubmit the document');
+    } finally {
+      setFollowUpSubmitting(false);
     }
   };
 
@@ -188,24 +281,127 @@ export const ReceptionPanel: React.FC<Props> = ({ request, requestId }) => {
   const handleConfirmPayment = async () => {
     if (!challanNo.trim()) { toast.error('Challan number is required'); return; }
     if (!scannedFileUrl) { toast.error('Please upload the scanned paid challan'); return; }
-    const totalAmount = request.packageTotal ?? 0;
     setPaymentSubmitting(true);
     try {
-      await dispatch(confirmPayment({
+      await dispatch(submitPaymentChallan({
         id: requestId,
-        data: { challanNo: challanNo.trim(), amountPaid: totalAmount, scannedChallanFileUrl: scannedFileUrl.trim() },
+        data: { challanNo: challanNo.trim(), scannedChallanFileUrl: scannedFileUrl.trim() },
       })).unwrap();
-      toast.success('Payment confirmed — request advanced to next step');
+      toast.success('Challan submitted — awaiting Possession Admin approval');
     } catch {
-      toast.error('Failed to confirm payment');
+      toast.error('Failed to submit challan');
     } finally {
       setPaymentSubmitting(false);
     }
   };
 
+  const handleApprovePayment = async () => {
+    setApproving(true);
+    try {
+      await dispatch(approvePayment({ id: requestId })).unwrap();
+      toast.success('Payment approved — request advanced to next step');
+    } catch {
+      toast.error('Failed to approve payment');
+    } finally {
+      setApproving(false);
+    }
+  };
+
+  const handleVerifyDocuments = async () => {
+    setVerifyingDocuments(true);
+    try {
+      await dispatch(initiateRequest({ id: requestId, comments: undefined })).unwrap();
+      toast.success('Documents verified — request sent to Transfer Branch');
+    } catch {
+      toast.error('Failed to verify documents');
+    } finally {
+      setVerifyingDocuments(false);
+    }
+  };
+
   return (
-    <Card title="Reception Panel">
+    <Card title={isPackageSelectionReady ? 'Package Selection' : 'Reception Panel'}>
       <div className="space-y-5">
+        {request.status === 'DocumentsVerification' && (
+          <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 space-y-3">
+            <p className="text-sm text-blue-800">
+              Review the submitted documents, then verify them to send the request to Transfer Branch.
+            </p>
+            <Button
+              variant="primary"
+              loading={verifyingDocuments}
+              onClick={handleVerifyDocuments}
+              icon={<CheckCircle size={16} />}
+            >
+              Verify Documents
+            </Button>
+          </div>
+        )}
+        {isIncompleteFollowUp && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 space-y-4">
+            <div>
+              <p className="text-sm font-semibold text-amber-800">Incomplete document follow-up</p>
+              <p className="text-xs text-amber-700">This request was returned for correction. Upload the missing document and resubmit it for admin review.</p>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Document type</label>
+                <select
+                  value={followUpType}
+                  onChange={(e) => setFollowUpType(e.target.value as typeof followUpType)}
+                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 outline-none focus:border-blue-400"
+                >
+                  <option value="Cnic">CNIC</option>
+                  <option value="AllotmentLetter">Allotment Letter</option>
+                  <option value="NocNdcForm">NOC/NDC Form</option>
+                  <option value="MessageScreenshot">Message Screenshot</option>
+                  <option value="EStampPaper">E-Stamp Paper</option>
+                  <option value="AuthorizedPersonCnic">Authorized Person CNIC</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Corrected file</label>
+                <input
+                  type="file"
+                  accept=".pdf,.jpg,.jpeg,.png"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    try {
+                      const formData = new FormData();
+                      formData.append('file', file);
+                      const res = await api.post<{ url: string; originalName: string }>('/uploads', formData, {
+                        headers: { 'Content-Type': 'multipart/form-data' },
+                      });
+                      setFollowUpUrl(res.data.url);
+                      toast.success('File uploaded');
+                    } catch {
+                      toast.error('Upload failed');
+                    }
+                  }}
+                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between gap-3 border-t border-amber-200 pt-3">
+              <span className="text-xs text-amber-700">
+                {followUpUrl ? 'Ready to resubmit' : 'No file selected yet'}
+              </span>
+              <Button
+                variant="primary"
+                size="sm"
+                loading={followUpSubmitting}
+                onClick={handleResubmitIncompleteDocument}
+              >
+                Resubmit to Admin
+              </Button>
+            </div>
+          </div>
+        )}
+
         {/* Form 1 summary */}
         <div className="bg-gray-50 rounded-lg p-4">
           <h3 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
@@ -230,9 +426,14 @@ export const ReceptionPanel: React.FC<Props> = ({ request, requestId }) => {
           </dl>
         </div>
 
-        {/* ── Package Selection (after Possession Issued) ── */}
-        {isPossessionIssued && (
+        {/* ── Package Selection section header ── */}
+        {isPackageSelectionReady && (
           <div className="space-y-5">
+            <div className="rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-2 flex items-center gap-2">
+              <Package size={14} className="text-indigo-600" />
+              <span className="text-sm font-semibold text-indigo-800">Step: Package Selection</span>
+              <span className="ml-auto text-xs text-indigo-500">Select a package, then print the challan to complete this step</span>
+            </div>
             {loadingPkgs && (
               <p className="text-sm text-gray-400 text-center py-4">Loading packages…</p>
             )}
@@ -243,8 +444,8 @@ export const ReceptionPanel: React.FC<Props> = ({ request, requestId }) => {
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Design Track</p>
                 <div className="grid grid-cols-2 gap-2">
                   {([
-                    { value: 'InclusiveDesign' as const,  label: 'Inclusive Design',      sub: 'Standard inclusive pricing' },
-                    { value: 'ExclusiveDesign' as const, label: 'Exclusive Design',       sub: 'Premium bespoke designs' },
+                    { value: 'InclusiveDesign' as const, label: 'Inclusive Design', sub: 'Premium bespoke designs, includes interior design' },
+                    { value: 'ExclusiveDesign' as const, label: 'Exclusive Design', sub: 'Standard inclusive pricing' },
                   ]).map((dt) => (
                     <button
                       key={dt.value}
@@ -354,33 +555,36 @@ export const ReceptionPanel: React.FC<Props> = ({ request, requestId }) => {
                 className="w-full"
                 disabled={!selectedPkgId || submitting}
                 onClick={handleSelectPackage}
-                icon={<CheckCircle size={16} />}
+                icon={<Printer size={16} />}
               >
-                {submitting ? 'Confirming…' : 'Confirm Package Selection'}
+                {submitting ? 'Saving…' : 'Select Package & Move to Payment'}
               </Button>
             )}
           </div>
         )}
 
-        {/* ── Payment Step (after package selected) ── */}
+        {/* ── Payment Step (after package is selected — challan printed, awaiting bank payment) ── */}
         {isAwaitingPayment && (
-          <div className="border border-amber-200 bg-amber-50 rounded-lg p-4 space-y-4">
-            <h3 className="text-sm font-semibold text-amber-800 flex items-center gap-2">
+          <div className="border border-blue-200 bg-blue-50 rounded-lg p-4 space-y-4">
+            <h3 className="text-sm font-semibold text-blue-800 flex items-center gap-2">
               <CreditCard size={14} />
-              Payment Collection
+              Step: Payment Confirmation
             </h3>
+            <p className="text-xs text-blue-700">
+              The package challan has been printed. Once the customer pays at the bank, upload the stamped challan and confirm payment below.
+            </p>
 
             {/* Package summary */}
             {request.packageTier && (
               <div className="space-y-1">
-                <div className="flex justify-between items-center bg-white border border-amber-200 rounded px-3 py-2 text-sm">
+                <div className="flex justify-between items-center bg-white border border-blue-200 rounded px-3 py-2 text-sm">
                   <span className="text-gray-600">
                     <Package size={13} className="inline mr-1" />
                     House Design – {request.packageTier}
                   </span>
                 </div>
                 {request.interiorDesignPackageTier && (
-                  <div className="flex justify-between items-center bg-white border border-amber-200 rounded px-3 py-2 text-sm">
+                  <div className="flex justify-between items-center bg-white border border-blue-200 rounded px-3 py-2 text-sm">
                     <span className="text-gray-600">
                       <Layers size={13} className="inline mr-1" />
                       Interior Design – {request.interiorDesignPackageTier}
@@ -391,7 +595,7 @@ export const ReceptionPanel: React.FC<Props> = ({ request, requestId }) => {
                   </div>
                 )}
                 {request.supervisionPackageTier && (
-                  <div className="flex justify-between items-center bg-white border border-amber-200 rounded px-3 py-2 text-sm">
+                  <div className="flex justify-between items-center bg-white border border-blue-200 rounded px-3 py-2 text-sm">
                     <span className="text-gray-600">
                       <HardHat size={13} className="inline mr-1" />
                       Supervision – {request.supervisionPackageTier}
@@ -402,7 +606,7 @@ export const ReceptionPanel: React.FC<Props> = ({ request, requestId }) => {
                   </div>
                 )}
                 {request.packageTotal != null && (
-                  <div className="flex justify-between items-center bg-amber-100 border border-amber-300 rounded px-3 py-2 text-sm font-bold">
+                  <div className="flex justify-between items-center bg-blue-100 border border-blue-300 rounded px-3 py-2 text-sm font-bold">
                     <span>Total Amount</span>
                     <span>PKR {request.packageTotal.toLocaleString()}</span>
                   </div>
@@ -423,56 +627,85 @@ export const ReceptionPanel: React.FC<Props> = ({ request, requestId }) => {
               )}
             </div>
 
-            {/* Print challan */}
+            {/* Reprint challan */}
             <Button
               variant="secondary"
               className="w-full"
               icon={<Printer size={15} />}
               onClick={handlePrintChallan}
             >
-              Print Payment Challan
+              Reprint Challan
             </Button>
 
-            <hr className="border-amber-200" />
+            <hr className="border-blue-200" />
 
-            {/* Upload paid challan */}
-            <p className="text-xs text-gray-500">
-              Once the customer pays at the bank and submits the stamped challan, enter the details below:
-            </p>
+            {isPaymentPendingApproval ? (
+              <>
+                {/* Challan already submitted — awaiting Possession Admin approval */}
+                <div className="bg-amber-50 border border-amber-300 rounded px-3 py-2 text-xs space-y-1">
+                  <p className="font-semibold text-amber-800">Challan submitted — awaiting approval</p>
+                  <p><span className="text-gray-500">Challan No:</span> <strong>{challanNo || request.challanNo}</strong></p>
+                </div>
 
-            <div className="space-y-2">
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">
-                  Challan Number <span className="text-red-500">*</span>
-                </label>
-                <Input
-                  value={challanNo}
-                  onChange={(e) => setChallanNo(e.target.value)}
-                  placeholder={request.challanNo ?? 'e.g. CHN-2026-A1B2C3'}
-                />
-              </div>
-              <FileUploadButton
-                label="Upload Paid Challan (Scanned Copy)"
-                required
-                value={scannedFileUrl}
-                onUploaded={(url) => setScannedFileUrl(url)}
-              />
-            </div>
+                {canApprovePayment ? (
+                  <Button
+                    variant="primary"
+                    className="w-full"
+                    loading={approving}
+                    onClick={handleApprovePayment}
+                    icon={<CheckCircle size={16} />}
+                  >
+                    Approve Payment
+                  </Button>
+                ) : (
+                  <p className="text-xs text-gray-500 text-center py-1">
+                    Waiting for Possession Admin to approve this payment.
+                  </p>
+                )}
+              </>
+            ) : (
+              <>
+                {/* Upload paid challan */}
+                <p className="text-xs text-gray-500">
+                  Once the customer pays at the bank and submits the stamped challan, enter the details below:
+                </p>
 
-            <Button
-              variant="primary"
-              className="w-full"
-              disabled={paymentSubmitting || !challanNo || !scannedFileUrl}
-              onClick={handleConfirmPayment}
-              icon={<CheckCircle size={16} />}
-            >
-              {paymentSubmitting ? 'Processing…' : 'Confirm Payment Done'}
-            </Button>
+                <div className="space-y-2">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                      Challan Number <span className="text-red-500">*</span>
+                    </label>
+                    <Input
+                      value={challanNo}
+                      onChange={(e) => setChallanNo(e.target.value)}
+                      placeholder={request.challanNo ?? 'e.g. CHN-2026-A1B2C3'}
+                    />
+                  </div>
+                  <FileUploadButton
+                    label="Upload Paid Challan (Scanned Copy)"
+                    required
+                    value={scannedFileUrl}
+                    onUploaded={(url) => setScannedFileUrl(url)}
+                  />
+                </div>
+
+                <Button
+                  variant="primary"
+                  className="w-full"
+                  disabled={paymentSubmitting || !challanNo || !scannedFileUrl}
+                  onClick={handleConfirmPayment}
+                  icon={<CheckCircle size={16} />}
+                >
+                  {paymentSubmitting ? 'Submitting…' : 'Submit Challan for Approval'}
+                </Button>
+              </>
+            )}
           </div>
         )}
 
+
         {/* ── Payment done + further stages ── */}
-        {isPaymentDone && (
+        {isPaymentDone && !isFinalApproved && (
           <div className="bg-green-50 border border-green-200 rounded-lg p-4 space-y-2">
             <h3 className="text-sm font-semibold text-green-800 flex items-center gap-2">
               <CheckCircle size={14} />
@@ -484,6 +717,39 @@ export const ReceptionPanel: React.FC<Props> = ({ request, requestId }) => {
                 <> Payment of <strong>PKR {request.packageTotal.toLocaleString()}</strong> recorded.</>
               )}
             </p>
+          </div>
+        )}
+
+        {/* ── Step 17: Document Delivery ── */}
+        {isFinalApproved && (
+          <div className="border border-emerald-200 bg-emerald-50 rounded-lg p-4 space-y-4">
+            <h3 className="text-sm font-semibold text-emerald-800 flex items-center gap-2">
+              <CheckCircle size={14} />
+              Final Approval Granted — Ready for Document Delivery
+            </h3>
+            <p className="text-xs text-emerald-700">
+              Print the possession certificate and all design documents, collect them in an envelope,
+              and hand over to the customer. Then mark the request as delivered.
+            </p>
+            <div className="flex flex-col gap-2">
+              <Button
+                variant="secondary"
+                className="w-full"
+                icon={<Printer size={15} />}
+                onClick={handlePrintCertificate}
+              >
+                Print Possession Certificate
+              </Button>
+              <Button
+                variant="primary"
+                className="w-full"
+                loading={delivering}
+                icon={<CheckCircle size={15} />}
+                onClick={handleDeliver}
+              >
+                Mark as Delivered &amp; Hand Over Documents
+              </Button>
+            </div>
           </div>
         )}
       </div>

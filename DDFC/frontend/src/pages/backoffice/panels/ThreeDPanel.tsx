@@ -3,7 +3,7 @@ import { UploadCloud, FileCheck, Trash2, CheckCircle, Box } from 'lucide-react';
 import { Card } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
 import type { PossessionRequest } from '../../../types';
-import { useAppDispatch } from '../../../store/hooks';
+import { useAppDispatch, useAppSelector } from '../../../store/hooks';
 import { threeDUploadFile, threeDComplete } from '../../../store/slices/requestsSlice';
 import { CadSection } from '../../../components/shared/CadSection';
 import { toast } from 'react-toastify';
@@ -25,6 +25,7 @@ interface Props {
 
 export const ThreeDPanel: React.FC<Props> = ({ request, requestId }) => {
   const dispatch    = useAppDispatch();
+  const staffUser = useAppSelector((state) => state.auth.staffUser);
   const inputRef    = useRef<HTMLInputElement>(null);
 
   const [uploading, setUploading]   = useState(false);
@@ -33,6 +34,14 @@ export const ThreeDPanel: React.FC<Props> = ({ request, requestId }) => {
 
   const existingFiles = request.threeDVisualizations ?? [];
   const isComplete    = request.status !== 'ArchitectureApproved';
+  let permissions = staffUser?.permissions;
+  if (typeof permissions === 'string') {
+    try { permissions = JSON.parse(permissions); }
+    catch { permissions = undefined; }
+  }
+  const canComplete = Array.isArray(permissions)
+    ? permissions.includes('CanComplete3D')
+    : typeof permissions === 'object' && permissions?.CanComplete3D === true;
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
@@ -74,7 +83,7 @@ export const ThreeDPanel: React.FC<Props> = ({ request, requestId }) => {
     setQueue((prev) => prev.filter((_, i) => i !== idx));
 
   const handleSaveAll = async () => {
-    if (!queue.length) return;
+    if (!queue.length) return true;
     setUploading(true);
     try {
       for (const f of queue) {
@@ -85,20 +94,23 @@ export const ThreeDPanel: React.FC<Props> = ({ request, requestId }) => {
       }
       setQueue([]);
       toast.success('3D files saved');
+      return true;
     } catch {
       toast.error('Failed to save files');
+      return false;
     } finally {
       setUploading(false);
     }
   };
 
   const handleComplete = async () => {
+    if (!canComplete) return;
     if (existingFiles.length === 0 && queue.length === 0) {
       toast.error('Upload at least one 3D file before completing');
       return;
     }
     // Save any unsaved queue first
-    if (queue.length) await handleSaveAll();
+    if (queue.length && !(await handleSaveAll())) return;
     setCompleting(true);
     try {
       await dispatch(threeDComplete(requestId)).unwrap();
@@ -197,7 +209,7 @@ export const ThreeDPanel: React.FC<Props> = ({ request, requestId }) => {
             )}
 
             {/* Complete step */}
-            <div className="pt-1 border-t border-gray-100 space-y-2">
+            {canComplete && <div className="pt-1 border-t border-gray-100 space-y-2">
               <p className="text-xs text-gray-500">
                 Once all 3D files are uploaded, mark this step as complete to advance the workflow.
               </p>
@@ -211,7 +223,7 @@ export const ThreeDPanel: React.FC<Props> = ({ request, requestId }) => {
               >
                 Complete 3D Visualization
               </Button>
-            </div>
+            </div>}
           </>
         )}
 

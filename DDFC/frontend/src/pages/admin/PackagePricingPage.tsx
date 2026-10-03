@@ -14,8 +14,8 @@ const CATEGORIES: { value: PackageCategory; label: string }[] = [
 ];
 
 const DESIGN_TYPES: { value: DesignType; label: string; desc: string }[] = [
-  { value: 'InclusiveDesign',  label: 'Inclusive Design',  desc: 'Standard inclusive services delivered by DDFC' },
-  { value: 'ExclusiveDesign', label: 'Exclusive Design',                 desc: 'Premium bespoke design services' },
+  { value: 'InclusiveDesign', label: 'Inclusive Design', desc: 'Premium bespoke design services, includes interior design' },
+  { value: 'ExclusiveDesign', label: 'Exclusive Design', desc: 'Standard design services delivered by DDFC' },
 ];
 
 const TIERS: PackageTier[] = ['Bronze', 'Silver', 'Gold'];
@@ -39,7 +39,7 @@ export const PackagePricingPage: React.FC = () => {
   const { packages, loading } = useAppSelector((s) => s.packages);
   const [plotType, setPlotType] = useState<PlotType>('Residential');
   const [category, setCategory] = useState<PackageCategory>('HouseDesign');
-  const [designType, setDesignType] = useState<DesignType>('InclusiveDesign');
+  const [designType, setDesignType] = useState<DesignType>('ExclusiveDesign');
   const plotSizes = PLOT_SIZES_BY_TYPE[plotType];
   const [editingCell, setEditingCell] = useState<{ packageId: string; field: string } | null>(null);
   const [editValue, setEditValue] = useState('');

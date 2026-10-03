@@ -79,8 +79,8 @@ export const DelayUndertakingPanel: React.FC<Props> = ({ request, requestId }) =
             {undertaking ? (
               <div className="text-sm text-green-700 space-y-1">
                 <p>
-                  <span className="font-medium">Initiated by:</span>{' '}
-                  {undertaking.initiatedBy === 'DDFC' ? 'DDFC (requested)' : 'Customer (self-initiated)'}
+                  <span className="font-medium">Requested by:</span>{' '}
+                  {undertaking.initiatedBy === 'DDFC' ? 'DDFC' : 'Customer'}
                 </p>
                 {undertaking.delayReason && (
                   <p><span className="font-medium">Reason:</span> {undertaking.delayReason}</p>

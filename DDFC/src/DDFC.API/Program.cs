@@ -50,6 +50,9 @@ builder.Services
     .AddDefaultTokenProviders();
 
 // ── DDFC Application Services ─────────────────────────────────────────────────
+builder.Services.AddHttpClient();
+builder.Services.AddSingleton<ISmsService,              TwilioSmsService>();
+builder.Services.AddScoped<IEmailService,               SmtpEmailService>();
 builder.Services.AddSingleton<IOtpService,             OtpService>();
 builder.Services.AddScoped<IJwtService,                JwtService>();
 builder.Services.AddScoped<IRoundRobinService,         RoundRobinService>();
@@ -96,7 +99,6 @@ builder.Services.AddAuthorization(o =>
     o.AddPolicy("ReceptionOfficer", p => p.RequireClaim("role", "Reception Officer"));
     o.AddPolicy("TransferOfficer", p => p.RequireClaim("role", "Transfer Officer"));
     o.AddPolicy("FinanceOfficer", p => p.RequireClaim("role", "Finance Officer"));
-    o.AddPolicy("TownPlanner", p => p.RequireClaim("role", "Town Planner"));
     o.AddPolicy("BuildingControlOfficer", p => p.RequireClaim("role", "Building Control Officer"));
     o.AddPolicy("Architect", p => p.RequireClaim("role", "Architect"));
     o.AddPolicy("StructureEngineer", p => p.RequireClaim("role", "Structure Engineer"));
@@ -137,19 +139,40 @@ builder.Services.AddAuthorization(o =>
     o.AddPolicy("CanApproveFinance", p => p.RequireClaim("permission", "CanApproveFinance"));
     o.AddPolicy("CanConfirmPayment", p => p.RequireClaim("permission", "CanConfirmPayment"));
 
+    // AD Coordinator review — runs after Finance, before DDFC Admin signs
+    o.AddPolicy("CanApproveAdCoord", p => p.RequireAssertion(c =>
+        c.User.HasClaim("permission", "CanApproveAdCoord") ||
+        c.User.HasClaim("role", "AD Coordinator")));
+
     // Reception Officer OR anyone with CanConfirmPayment permission
     o.AddPolicy("CanConfirmPaymentOrReception", p => p.RequireAssertion(c =>
         c.User.HasClaim("permission", "CanConfirmPayment") ||
         c.User.HasClaim("role", "Reception Officer")));
 
+    // Possession Admin approves the challan Reception uploaded
+    o.AddPolicy("CanApprovePayment", p => p.RequireAssertion(c =>
+        c.User.HasClaim("permission", "CanConfirmPayment") ||
+        c.User.HasClaim("role", "Admin") ||
+        c.User.HasClaim("role", "Possession Admin") ||
+        c.User.HasClaim("role", "DDFC Admin")));
+
     // ── Planning & Control Permissions ─────────────────────────────────────
     o.AddPolicy("CanSubmitBuildingControl", p => p.RequireClaim("permission", "CanSubmitBuildingControl"));
     o.AddPolicy("CanUploadSoilTest", p => p.RequireClaim("permission", "CanUploadSoilTest"));
     o.AddPolicy("CanIssuePossessionCert", p => p.RequireClaim("permission", "CanIssuePossessionCert"));
-    o.AddPolicy("CanSignPossessionLetter", p => p.RequireClaim("permission", "CanSignPossessionLetter"));
+    o.AddPolicy("CanSignPossessionLetter", p => p.RequireAssertion(c =>
+        c.User.HasClaim("permission", "CanSignPossessionLetter") ||
+        c.User.HasClaim("role", "Admin") ||
+        c.User.HasClaim("role", "DDFC Admin") ||
+        c.User.HasClaim("role", "Possession Admin")));
 
     // ── Design & Engineering Permissions ───────────────────────────────────
     o.AddPolicy("CanUploadPlan", p => p.RequireClaim("permission", "CanUploadPlan"));
+    o.AddPolicy("CanComplete3D", p => p.RequireClaim("permission", "CanComplete3D"));
+    o.AddPolicy("CanUpload3D", p => p.RequireAssertion(c =>
+        c.User.HasClaim("permission", "CanComplete3D") ||
+        c.User.HasClaim("permission", "CanAssign3DOperator")));
+    o.AddPolicy("CanAssign3DOperator", p => p.RequireClaim("permission", "CanAssign3DOperator"));
     o.AddPolicy("CanCompleteStructure", p => p.RequireClaim("permission", "CanCompleteStructure"));
     o.AddPolicy("CanCompleteMEP", p => p.RequireClaim("permission", "CanCompleteMEP"));
     o.AddPolicy("CanPrincipalApprove", p => p.RequireClaim("permission", "CanPrincipalApprove"));
@@ -196,6 +219,7 @@ builder.Services.AddAuthorization(o =>
     o.AddPolicy("FinanceDepartment", p => p.RequireClaim("departmentCode", "FB"));
     o.AddPolicy("BuildingControlDepartment", p => p.RequireClaim("departmentCode", "BC"));
     o.AddPolicy("ArchitectureDepartment", p => p.RequireClaim("departmentCode", "AD"));
+    o.AddPolicy("ThreeDDepartment", p => p.RequireClaim("departmentCode", "3D"));
     o.AddPolicy("StructureDepartment", p => p.RequireClaim("departmentCode", "SD"));
     o.AddPolicy("MEPDepartment", p => p.RequireClaim("departmentCode", "MD"));
     o.AddPolicy("PrincipalOfficeDepartment", p => p.RequireClaim("departmentCode", "PO"));
@@ -244,6 +268,7 @@ builder.Services.AddAuthorization(o =>
     // ── Technical Team (Engineers + Architects) ────────────────────────────
     o.AddPolicy("TechnicalTeam", p => p.RequireAssertion(c =>
         c.User.HasClaim("departmentCode", "AD") ||
+        c.User.HasClaim("departmentCode", "3D") ||
         c.User.HasClaim("departmentCode", "SD") ||
         c.User.HasClaim("departmentCode", "MD") ||
         c.User.HasClaim("departmentCode", "PO") ||

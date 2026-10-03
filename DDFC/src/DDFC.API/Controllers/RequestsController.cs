@@ -50,8 +50,19 @@ public class RequestsController : ControllerBase
         if (requestType.HasValue)
             q = q.Where(r => (int)r.RequestType == requestType.Value);
 
-        var list = (await q.OrderByDescending(r => r.CreatedAt).ToListAsync())
-            .Select(r => MapToDto(r));
+        var requests = await q.OrderByDescending(r => r.CreatedAt).ToListAsync();
+        var list = new List<PossessionRequestDto>();
+        foreach (var request in requests)
+        {
+            var activeSteps = (request.Status == PossessionRequestStatus.DocumentsVerification
+                || request.Status == PossessionRequestStatus.PackagePaid
+                || request.Status == PossessionRequestStatus.ArchitectureApproved
+                || request.Status == PossessionRequestStatus.PrincipalArchitectApproved)
+                && request.WorkflowRequestId.HasValue
+                ? await _svc.GetActiveWorkflowStepNamesAsync(request.Id)
+                : Enumerable.Empty<string>();
+            list.Add(MapToDto(request, activeSteps));
+        }
         return Ok(list);
     }
 
@@ -76,12 +87,15 @@ public class RequestsController : ControllerBase
             .Include(r => r.Plot)
             .Include(r => r.SelectedPackage).ThenInclude(p => p!.LineItems)
             .Include(r => r.WorkflowHistory).ThenInclude(h => h.ActionByUser)
-            .Include(r => r.ArchitecturalPlans)
+            .Include(r => r.ArchitecturalPlans).ThenInclude(p => p.RevisionRequests)
+            .Include(r => r.ThreeDVisualizations)
+            .Include(r => r.CadFiles)
             .Include(r => r.StructuralReports)
             .Include(r => r.MEPReports)
             .Include(r => r.SoilTestReport)
             .Include(r => r.Documents)
-            .Include(r => r.Payments)
+            .Include(r => r.Payments).ThenInclude(p => p.Challan)
+            .Include(r => r.PossessionCertificate)
             .Include(r => r.AssignedArchitect)
             .Include(r => r.DelayUndertaking)
             .Include(r => r.ArchitectUndertaking)
@@ -102,12 +116,15 @@ public class RequestsController : ControllerBase
             .Include(r => r.Plot)
             .Include(r => r.SelectedPackage).ThenInclude(p => p!.LineItems)
             .Include(r => r.WorkflowHistory).ThenInclude(h => h.ActionByUser)
-            .Include(r => r.ArchitecturalPlans)
+            .Include(r => r.ArchitecturalPlans).ThenInclude(p => p.RevisionRequests)
+            .Include(r => r.ThreeDVisualizations)
+            .Include(r => r.CadFiles)
             .Include(r => r.StructuralReports)
             .Include(r => r.MEPReports)
             .Include(r => r.SoilTestReport)
             .Include(r => r.Documents)
-            .Include(r => r.Payments)
+            .Include(r => r.Payments).ThenInclude(p => p.Challan)
+            .Include(r => r.PossessionCertificate)
             .Include(r => r.DelayUndertaking)
             .Include(r => r.ArchitectUndertaking)
             .Include(r => r.PlotAnnexation)
@@ -174,6 +191,40 @@ public class RequestsController : ControllerBase
     {
         await _svc.RejectFinanceAsync(id, GetCurrentUserId(), note.Comments);
         return NoContent();
+    }
+
+    // ── Step 3b: AD Coordinator (runs after Finance, before DDFC Admin) ──────
+    [HttpPost("{id:guid}/ad-coord/approve")]
+    [Authorize(Policy = "CanApproveAdCoord")]
+    public async Task<IActionResult> ApproveAdCoord(Guid id, [FromBody] ActionNoteDto note)
+    {
+        try
+        {
+            await _svc.ApproveAdCoordAsync(id, GetCurrentUserId(), note.Comments);
+            return NoContent();
+        }
+        catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
+    }
+
+    [HttpPost("{id:guid}/ad-coord/reject")]
+    [Authorize(Policy = "CanApproveAdCoord")]
+    public async Task<IActionResult> RejectAdCoord(Guid id, [FromBody] ActionNoteDto note)
+    {
+        await _svc.RejectAdCoordAsync(id, GetCurrentUserId(), note.Comments);
+        return NoContent();
+    }
+
+    // ── Step 3c: BCD Upload Possession Letter (after AD Coordinator) ─────────
+    [HttpPost("{id:guid}/bcd/upload-possession-letter")]
+    [Authorize(Policy = "CanIssuePossessionCert")]
+    public async Task<IActionResult> UploadBcdPossessionLetter(Guid id, [FromBody] UploadPossessionLetterDto dto)
+    {
+        try
+        {
+            await _svc.UploadBcdPossessionLetterAsync(id, GetCurrentUserId(), dto.FileUrl, dto.Comments);
+            return NoContent();
+        }
+        catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
     }
 
     // ── Step 4: DDFC Admin – Sign Possession Letter ───────────────────────────
@@ -580,17 +631,33 @@ public class RequestsController : ControllerBase
         return Content(html, "text/html");
     }
 
-    /// <summary>Sends the undertaking PDF to the customer's registered email (stub).</summary>
+    /// <summary>Sends the undertaking PDF to the customer's registered email.</summary>
     [HttpPost("{id:guid}/undertaking/send-email")]
     [Authorize(Policy = "StaffOrAdmin")]
-    public async Task<IActionResult> SendUndertakingEmail(Guid id)
+    public async Task<IActionResult> SendUndertakingEmail(Guid id,
+        [FromServices] IEmailService emailService)
     {
         var req = await _db.PossessionRequests
             .Include(r => r.Customer)
             .FirstOrDefaultAsync(r => r.Id == id);
         if (req is null) return NotFound();
-        // TODO: integrate email provider — for now just return success
-        return Ok(new { message = $"Undertaking email queued for {req.Customer?.Email ?? "customer"}" });
+
+        var email = req.Customer?.Email;
+        if (string.IsNullOrWhiteSpace(email))
+            return BadRequest(new { message = "Customer has no email address on file." });
+
+        var subject = $"DDFC – Architect Undertaking for Request {req.RequestId}";
+        var previewUrl = $"{Request.Scheme}://{Request.Host}/api/v1/requests/{id}/undertaking/preview";
+        var body = $"""
+            <p>Dear {req.OwnerTitle} {req.OwnerName},</p>
+            <p>Please find your Architect Delay Undertaking for DDFC request <strong>{req.RequestId}</strong>
+               by clicking the link below. Print the document, sign it, and return the signed copy to our office.</p>
+            <p><a href="{previewUrl}">View &amp; Print Undertaking</a></p>
+            <p>Regards,<br/>DDFC – DHA Peshawar</p>
+            """;
+
+        await emailService.SendAsync(email, subject, body);
+        return Ok(new { message = $"Undertaking email sent to {email}." });
     }
 
     /// <summary>Attaches the signed undertaking and places the request on hold for HoldDays.</summary>
@@ -714,17 +781,47 @@ public class RequestsController : ControllerBase
     [Authorize(Policy = "StaffOrAdmin")]
     public async Task<IActionResult> AssignCadOperator(Guid id, [FromBody] CadAssignmentRequestDto dto)
     {
+        if (dto is null)
+            return BadRequest(new { message = "The dto field is required." });
+
+        if (string.IsNullOrWhiteSpace(dto.CadType))
+            return BadRequest(new { message = "cadType is required." });
+
+        if (dto.AssignedUserId == Guid.Empty)
+            return BadRequest(new { message = "assignedUserId is required." });
+
         var req = await _db.PossessionRequests
             .Include(r => r.CadAssignments)
             .FirstOrDefaultAsync(r => r.Id == id);
         if (req is null) return NotFound();
 
         // Replace existing assignment of same cadType if present
+        if (dto.CadType == "ArchitectDraft" && req.Status != PossessionRequestStatus.ThreeDDraftPending)
+            return BadRequest(new { message = "Architect draft assignments are only available at step 15." });
+
+        if (req.Status == PossessionRequestStatus.ThreeDDraftPending &&
+            (dto.CadType == "ThreeD" || dto.CadType == "ArchitectDraft"))
+        {
+            var requiredRole = dto.CadType == "ArchitectDraft" ? "Architect" : "3D Operator";
+            var eligible = await _db.UserRoles.AnyAsync(userRole => userRole.UserId == dto.AssignedUserId &&
+                _db.Roles.Any(role => role.Id == userRole.RoleId && role.Name == requiredRole));
+            if (!eligible)
+                return BadRequest(new { message = $"Select a user with the {requiredRole} role." });
+        }
+
         var existing = req.CadAssignments.FirstOrDefault(ca => ca.CadType == dto.CadType);
         if (existing is not null)
         {
             existing.AssignedUserId = dto.AssignedUserId;
             existing.AssignedAt     = DateTime.UtcNow;
+            if (req.Status == PossessionRequestStatus.ThreeDDraftPending &&
+                (dto.CadType == "ThreeD" || dto.CadType == "ArchitectDraft"))
+            {
+                existing.FileUrl = null;
+                existing.FileName = null;
+                existing.FileType = null;
+                existing.CompletedAt = null;
+            }
         }
         else
         {
@@ -740,6 +837,12 @@ public class RequestsController : ControllerBase
 
         req.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
+        if ((dto.CadType == "ThreeD" || dto.CadType == "ArchitectDraft") && req.Status == PossessionRequestStatus.ThreeDDraftPending)
+        {
+            var drafter = req.CadAssignments.FirstOrDefault(assignment => assignment.CadType == "ThreeD");
+            if (drafter != null)
+                await _svc.AssignThreeDDrafterAsync(id, GetCurrentUserId(), drafter.AssignedUserId);
+        }
         return Ok(new { message = $"{dto.CadType} CAD operator assigned." });
     }
 
@@ -752,12 +855,13 @@ public class RequestsController : ControllerBase
         {
             "architecture" => "Architecture",
             "threed"       => "ThreeD",
+            "architectdraft" => "ArchitectDraft",
             "structure"    => "Structure",
             "mep"          => "MEP",
             _              => null
         };
         if (normalised is null)
-            return BadRequest(new { message = "Invalid cadType. Use: architecture | threed | structure | mep" });
+            return BadRequest(new { message = "Invalid cadType. Use: architecture | threed | architectdraft | structure | mep" });
 
         var req = await _db.PossessionRequests
             .Include(r => r.CadAssignments)
@@ -768,12 +872,34 @@ public class RequestsController : ControllerBase
         if (assignment is null)
             return BadRequest(new { message = $"No CAD operator has been assigned for {normalised} yet." });
 
+        if (normalised == "ArchitectDraft" && req.Status != PossessionRequestStatus.ThreeDDraftPending)
+            return BadRequest(new { message = "Architect draft uploads are only available at step 15." });
+        if (string.IsNullOrWhiteSpace(dto.FileUrl))
+            return BadRequest(new { message = "A file must be attached before submission." });
+
         assignment.FileUrl     = dto.FileUrl;
         assignment.FileName    = dto.FileName;
         assignment.FileType    = dto.FileType;
         assignment.CompletedAt = DateTime.UtcNow;
         req.UpdatedAt = DateTime.UtcNow;
+        if (req.Status == PossessionRequestStatus.ThreeDDraftPending &&
+            (normalised == "ThreeD" || normalised == "ArchitectDraft"))
+        {
+            _db.Documents.Add(new Document
+            {
+                RequestId = req.Id,
+                StepName = "Architect \u2013 Assign 3D Drafter & Upload Draft",
+                DocType = normalised == "ThreeD" ? "Drafter Draft" : "Architect Draft",
+                FileUrl = dto.FileUrl,
+                UploadedBy = GetCurrentUserId(),
+                UploadedAt = DateTime.UtcNow,
+            });
+        }
         await _db.SaveChangesAsync();
+        if ((normalised == "ThreeD" || normalised == "ArchitectDraft") && req.Status == PossessionRequestStatus.ThreeDDraftPending)
+            await _svc.CompleteThreeDDraftAsync(id, GetCurrentUserId());
+        if (normalised == "MEP")
+            await _svc.TryCompleteMEPAsync(id, GetCurrentUserId());
         return Ok(new { message = $"{normalised} CAD file submitted." });
     }
 
@@ -788,6 +914,19 @@ public class RequestsController : ControllerBase
             return NoContent();
         }
         catch (Exception ex) { return BadRequest(new { message = ex.Message }); }
+    }
+
+    // ── Step 5a: Soil Test (before Principal Architect Initial Review; DDFC workflow only) ─
+    [HttpPost("{id:guid}/soil-test/initial")]
+    [Authorize(Policy = "CanUploadSoilTest")]
+    public async Task<IActionResult> SubmitInitialSoilTest(Guid id, [FromBody] SoilTestDto dto)
+    {
+        try
+        {
+            var req = await _svc.SubmitInitialSoilTestAsync(id, dto, GetCurrentUserId());
+            return Ok(MapToDto(req));
+        }
+        catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
     }
 
     // ── Step 5b: Principal Architect – Initial Review ──────────────────────────
@@ -842,113 +981,132 @@ public class RequestsController : ControllerBase
 
         var customer = req.Customer;
         var plot = req.Plot;
-        var lineItemRows = string.Join("", pkg.LineItems
-            .Where(li => !li.IsFree)
-            .OrderBy(li => li.SortOrder)
-            .Select(li => $"<tr><td>{li.ServiceName}</td><td class=\"amt\">PKR {li.AmountDDFC:N0}</td></tr>"));
-        var freeItems = string.Join(", ", pkg.LineItems.Where(li => li.IsFree).Select(li => li.ServiceName));
+                static string Encode(string? value) => System.Net.WebUtility.HtmlEncode(value ?? string.Empty);
+                static string NumberInWords(decimal number)
+                {
+                        string[] units = ["Zero", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine",
+                                "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"];
+                        string[] tens = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"];
+                        if (number < 20) return units[(int)number];
+                        if (number < 100)
+                                return tens[(int)(number / 10)] + (number % 10 > 0 ? " " + NumberInWords(number % 10) : "");
+                        (decimal Value, string Name)[] scales = [(1_000_000_000_000m, "Trillion"),
+                                (1_000_000_000m, "Billion"), (1_000_000m, "Million"), (1_000m, "Thousand"), (100m, "Hundred")];
+                        var scale = scales.First(item => number >= item.Value);
+                        return NumberInWords(decimal.Floor(number / scale.Value)) + " " + scale.Name
+                                + (number % scale.Value > 0 ? " " + NumberInWords(number % scale.Value) : "");
+                }
+
+                var amount = decimal.Round(payment.TotalAmount, 2, MidpointRounding.AwayFromZero);
+                var paisa = (amount - decimal.Truncate(amount)) * 100;
+                var amountInWords = NumberInWords(decimal.Truncate(amount))
+                        + (paisa > 0 ? " Rupees and " + NumberInWords(paisa) + " Paisa" : "") + " Only";
+                var amountFormat = paisa > 0 ? "N2" : "N0";
+                var selectedPackages = new[] { pkg, req.SelectedInteriorDesignPackage, req.SelectedSupervisionPackage }
+                        .Where(selected => selected != null).Select(selected => selected!).ToList();
+                var itemRows = string.Join("", selectedPackages.Select((selected, index) =>
+                {
+                        var particular = selected.PackageCategory.ToString() switch
+                        {
+                                "InteriorDesign" => "Interior Design",
+                                "Supervision" => "Supervision",
+                                _ => "Lump sum",
+                        };
+                        var design = selected.DesignType.ToString() == "InclusiveDesign" ? "Inclusive Design" : "Exclusive Design";
+                        var packageAmount = selected.LineItems.Where(item => !item.IsFree).Sum(item => item.AmountDDFC);
+                        return $"<tr><td>{index + 1}</td><td>{particular}</td><td>{design}</td><td>{Encode(selected.PackageTier.ToString())}</td><td class=\"amount\">{packageAmount.ToString(amountFormat)}</td></tr>";
+                }));
+                var emptyRows = string.Concat(Enumerable.Repeat("<tr><td>&nbsp;</td><td></td><td></td><td></td><td></td></tr>", 10 - selectedPackages.Count));
+                var plotSize = plot.PlotSize.ToString() switch
+                {
+                        "FourMarla" => "4 Marla", "FiveMarla" => "5 Marla", "EightMarla" => "8 Marla",
+                        "TenMarla" => "10 Marla", "OneKanal" => "1 Kanal", "TwoKanal" => "2 Kanal",
+                        _ => plot.PlotSize.ToString(),
+                };
+
+                string RenderCopy(string label) => $$"""
+<section class="challan-copy" aria-label="{{Encode(label)}}">
+    <header class="copy-header">
+        <div class="dha-mark">DHA<span>PESHAWAR</span></div>
+        <h1>{{Encode(label)}}</h1>
+        <div class="design-mark">DHA<span>DESIGN</span></div>
+    </header>
+    <div class="details">
+        <dl class="account-details">
+            <dt>Title:</dt><dd class="organization">DHA Design &amp; Facilitation Centre (DDFC)</dd>
+            <dt>AC No:</dt><dd>MicroChip Enterprises (Pvt) Ltd.<br/>IBAN No: PK40ALFH56540050023666769</dd>
+            <dt>Bank:</dt><dd>Bank Alfalah (Islamic)</dd>
+            <dt>File No:</dt><dd>{{Encode(req.FileNo)}}</dd>
+            <dt>Name:</dt><dd class="strong">{{Encode(customer.FullName)}}</dd>
+            <dt>CNIC:</dt><dd class="strong">{{Encode(customer.CNIC)}}</dd>
+        </dl>
+        <dl class="reference-details">
+            <dt>Date</dt><dd>{{payment.CreatedAt:dd/MM/yyyy}}</dd>
+            <dt>Challan</dt><dd>{{Encode(payment.ChallanNo)}}</dd>
+            <dt>Plot No</dt><dd>{{Encode(plot.PlotNumber)}}</dd>
+            <dt>Type</dt><dd class="strong">{{Encode(plot.PlotType.ToString())}}</dd>
+            <dt>Plot Size</dt><dd>{{Encode(plotSize)}}</dd>
+        </dl>
+    </div>
+    <table class="items">
+        <colgroup><col class="serial"/><col class="particular"/><col class="design"/><col class="tier"/><col class="price"/></colgroup>
+        <thead><tr><th>Sr</th><th colspan="3">Particular</th><th>Amount Rs</th></tr></thead>
+        <tbody>{{itemRows}}{{emptyRows}}</tbody>
+        <tfoot><tr><td colspan="4" class="total-label">Total</td><td class="amount strong">{{amount.ToString(amountFormat)}}</td></tr></tfoot>
+    </table>
+    <div class="amount-words"><span>Amount in<br/>words</span><strong>{{Encode(amountInWords)}}</strong></div>
+    <footer class="signatures">
+        <span>Accountant</span><span>Customer Signature</span><span>Signature/ Bank<br/>Stamp</span>
+    </footer>
+</section>
+""";
 
         var html = $$"""
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="utf-8"/>
-<title>Payment Challan – {{payment.ChallanNo}}</title>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Payment Challan - {{Encode(payment.ChallanNo)}}</title>
 <style>
-  * { margin:0; padding:0; box-sizing:border-box; }
-  body { font-family: Arial, sans-serif; font-size: 11px; color: #111; background:#fff; }
-  .page { width:210mm; padding:10mm 12mm; }
-  .header { display:flex; align-items:center; gap:10px; border-bottom:2px solid #1a3c5e; padding-bottom:6px; margin-bottom:8px; }
-  .header-text h1 { font-size:16px; color:#1a3c5e; font-weight:900; letter-spacing:1px; }
-  .header-text p { font-size:10px; color:#555; }
-  .challan-title { text-align:center; font-size:14px; font-weight:bold; letter-spacing:2px;
-    background:#1a3c5e; color:#fff; padding:5px; margin-bottom:8px; border-radius:3px; }
-  .copy-label { text-align:center; font-size:10px; color:#888; margin-bottom:10px; }
-  .section { border:1px solid #ccc; border-radius:4px; margin-bottom:8px; }
-  .section-title { background:#f0f4f8; font-weight:bold; font-size:10px; padding:4px 8px;
-    border-bottom:1px solid #ccc; color:#1a3c5e; text-transform:uppercase; letter-spacing:.5px; }
-  .section-body { padding:6px 8px; }
-  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:4px 16px; }
-  .field label { font-size:9px; color:#888; display:block; }
-  .field span { font-weight:bold; font-size:11px; }
-  table.items { width:100%; border-collapse:collapse; margin-top:4px; }
-  table.items th { background:#f0f4f8; font-size:10px; padding:4px 8px; text-align:left; border:1px solid #ccc; }
-  table.items td { padding:4px 8px; border:1px solid #ddd; font-size:11px; }
-  td.amt { text-align:right; font-weight:bold; }
-  .total-row td { font-weight:bold; background:#1a3c5e; color:#fff; }
-  .bank-box { background:#fffbe6; border:1px solid #f0c040; border-radius:4px; padding:8px; margin-bottom:8px; }
-  .bank-box .bank-title { font-weight:bold; font-size:11px; color:#8a6c00; margin-bottom:4px; }
-  .bank-row { display:flex; justify-content:space-between; font-size:11px; margin-bottom:2px; }
-  .bank-label { color:#888; }
-  .bank-value { font-weight:bold; }
-  .sig-row { display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-top:16px; }
-  .sig-box { border-top:1px solid #333; padding-top:4px; text-align:center; font-size:10px; color:#555; }
-  .footer { margin-top:10px; font-size:9px; color:#999; text-align:center; border-top:1px solid #eee; padding-top:6px; }
-  @media print { .page { padding:5mm 8mm; } }
+    @page { size: A4 landscape; margin: 8mm; }
+    * { box-sizing: border-box; }
+    body { margin: 0; color: #111; background: #e5e7eb; font-family: Arial, sans-serif; font-size: 9pt; }
+    .page { width: 281mm; height: 193mm; margin: 8mm auto; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 7mm; background: #fff; }
+    .challan-copy { min-width: 0; height: 100%; padding: 5mm 3mm; border: 0.3mm solid #333; display: flex; flex-direction: column; break-inside: avoid; }
+    .copy-header { display: grid; grid-template-columns: 18mm minmax(0, 1fr) 18mm; align-items: center; gap: 3mm; min-height: 15mm; margin-bottom: 3mm; }
+    .copy-header h1 { margin: 0; border: 0.25mm solid #333; padding: 1.5mm; text-align: center; font-size: 10pt; font-weight: bold; }
+    .dha-mark { color: #482557; font-family: Georgia, serif; font-size: 18pt; font-weight: bold; text-align: center; }
+    .design-mark { color: #315d88; font-size: 14pt; font-weight: bold; text-align: center; }
+    .dha-mark span, .design-mark span { display: block; font-family: Arial, sans-serif; font-size: 6pt; }
+    .details { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 37mm); gap: 3mm; min-height: 38mm; margin-bottom: 3mm; }
+    dl { margin: 0; display: grid; align-content: start; gap: 1mm 2mm; line-height: 1.3; }
+    .account-details { grid-template-columns: 13mm minmax(0, 1fr); font-size: 8pt; }
+    .reference-details { grid-template-columns: 14mm minmax(0, 1fr); font-size: 8pt; }
+    dt, dd { margin: 0; overflow-wrap: anywhere; }
+    .reference-details dt, .organization, .strong { font-weight: bold; }
+    .items { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 8.5pt; }
+    .items th, .items td { border: 0.2mm solid #333; padding: 1mm; height: 6.5mm; vertical-align: middle; overflow-wrap: anywhere; }
+    .items th { font-weight: bold; text-align: center; }
+    .items td { text-align: center; }
+    .items .amount { text-align: right; font-variant-numeric: tabular-nums; }
+    .serial { width: 7%; } .particular { width: 24%; } .design { width: 27%; } .tier { width: 20%; } .price { width: 22%; }
+    .items .total-label { text-align: right; font-weight: bold; }
+    .amount-words { display: grid; grid-template-columns: 20mm minmax(0, 1fr); gap: 2mm; padding: 2mm 0; line-height: 1.35; font-size: 8.5pt; }
+    .amount-words strong { font-weight: 500; overflow-wrap: anywhere; }
+    .signatures { margin-top: auto; display: grid; grid-template-columns: 1fr 1.4fr 1fr; align-items: end; gap: 3mm; padding: 12mm 0 4mm; text-align: center; font-weight: bold; font-size: 8pt; }
+    @media print {
+        body { background: #fff; }
+        .page { margin: 0; break-after: page; page-break-after: always; }
+        .page:last-child { break-after: auto; page-break-after: auto; }
+    }
 </style>
 </head>
 <body>
-<div class="page">
-  <div class="header">
-    <div class="header-text">
-      <h1>DEFENCE HOUSING AUTHORITY – LAHORE</h1>
-      <p>DHA Possession & Construction Workflow System</p>
-    </div>
-  </div>
-
-  <div class="challan-title">PAYMENT CHALLAN</div>
-  <div class="copy-label">BANK COPY / CUSTOMER COPY / OFFICE COPY</div>
-
-  <div class="section">
-    <div class="section-title">Challan Information</div>
-    <div class="section-body grid2">
-      <div class="field"><label>Challan No</label><span>{{payment.ChallanNo}}</span></div>
-      <div class="field"><label>Date Issued</label><span>{{DateTime.UtcNow:dd-MMM-yyyy}}</span></div>
-      <div class="field"><label>Request ID</label><span>{{req.RequestId}}</span></div>
-      <div class="field"><label>File No</label><span>{{req.FileNo}}</span></div>
-    </div>
-  </div>
-
-  <div class="section">
-    <div class="section-title">Applicant Details</div>
-    <div class="section-body grid2">
-      <div class="field"><label>Name</label><span>{{customer.FullName}}</span></div>
-      <div class="field"><label>CNIC</label><span>{{customer.CNIC}}</span></div>
-      <div class="field"><label>Phone</label><span>{{customer.PhoneNumber}}</span></div>
-      <div class="field"><label>Plot No</label><span>{{plot.PlotNumber}} – Sector {{plot.SectorNo}}, Phase {{plot.PhaseNo}}</span></div>
-    </div>
-  </div>
-
-  <div class="section">
-    <div class="section-title">Package – {{pkg.PackageTier}} Package</div>
-    <div class="section-body">
-      <table class="items">
-        <tr><th>Service</th><th>Amount (DDFC Rate)</th></tr>
-        {{lineItemRows}}
-        {{(freeItems.Length > 0 ? $"<tr><td colspan='2' style='font-size:10px;color:#777;'>Complimentary: {freeItems}</td></tr>" : "")}}
-        <tr class="total-row"><td>TOTAL PAYABLE</td><td class="amt">PKR {{payment.TotalAmount:N0}}</td></tr>
-      </table>
-    </div>
-  </div>
-
-  <div class="bank-box">
-    <div class="bank-title">&#127968; Bank Payment Instructions</div>
-    <div class="bank-row"><span class="bank-label">Bank Name</span><span class="bank-value">Bank Alfalah (Islamic)</span></div>
-    <div class="bank-row"><span class="bank-label">Account Title</span><span class="bank-value">MicroChip Enterprises (Pvt) Ltd.</span></div>
-    <div class="bank-row"><span class="bank-label">IBAN</span><span class="bank-value" style="letter-spacing:1px;">PK40ALFH56540050023666769</span></div>
-    <div class="bank-row"><span class="bank-label">Amount</span><span class="bank-value" style="font-size:14px;color:#1a3c5e;">PKR {{payment.TotalAmount:N0}}</span></div>
-    <div class="bank-row"><span class="bank-label">Reference / Narration</span><span class="bank-value">{{payment.ChallanNo}} / {{req.RequestId}}</span></div>
-  </div>
-
-  <div class="sig-row">
-    <div class="sig-box">Applicant Signature</div>
-    <div class="sig-box">Receptionist Stamp &amp; Signature</div>
-  </div>
-
-  <div class="footer">
-    This challan is valid for 30 days from the date of issue. Please deposit the exact amount and retain the bank-stamped copy as proof of payment.
-  </div>
-</div>
+<main>
+    <div class="page">{{RenderCopy("DDFC Copy")}}{{RenderCopy("TP & BCD Copy")}}</div>
+    <div class="page">{{RenderCopy("Bank Copy")}}{{RenderCopy("Member's Copy")}}</div>
+</main>
 <script>window.onload = function(){ window.print(); }</script>
 </body>
 </html>
@@ -963,6 +1121,32 @@ public class RequestsController : ControllerBase
         try
         {
             await _svc.ConfirmPaymentAsync(id, GetCurrentUserId(), dto.AmountPaid, dto.ChallanNo, dto.ScannedChallanFileUrl);
+            return Ok(await _svc.GetRequestAsync(id));
+        }
+        catch (Exception ex) { return BadRequest(new { message = ex.Message }); }
+    }
+
+    // Reception uploads the paid challan; request awaits Possession Admin approval
+    [HttpPost("{id:guid}/payment/submit-challan")]
+    [Authorize(Policy = "CanConfirmPaymentOrReception")]
+    public async Task<IActionResult> SubmitPaymentChallan(Guid id, [FromBody] SubmitPaymentChallanDto dto)
+    {
+        try
+        {
+            await _svc.SubmitPaymentChallanAsync(id, GetCurrentUserId(), dto.ChallanNo, dto.ScannedChallanFileUrl);
+            return Ok(await _svc.GetRequestAsync(id));
+        }
+        catch (Exception ex) { return BadRequest(new { message = ex.Message }); }
+    }
+
+    // Possession Admin approves the uploaded challan and advances the workflow
+    [HttpPost("{id:guid}/payment/approve")]
+    [Authorize(Policy = "CanApprovePayment")]
+    public async Task<IActionResult> ApprovePayment(Guid id, [FromBody] ApprovePaymentDto? dto)
+    {
+        try
+        {
+            await _svc.ApprovePaymentAsync(id, GetCurrentUserId(), dto?.AmountPaid);
             return Ok(await _svc.GetRequestAsync(id));
         }
         catch (Exception ex) { return BadRequest(new { message = ex.Message }); }
@@ -1000,7 +1184,7 @@ public class RequestsController : ControllerBase
 
     // ── Step 7b: 3D Visualization ─────────────────────────────────────────────
     [HttpPost("{id:guid}/3d-visualization")]
-    [Authorize(Policy = "ArchitectureDepartment")]
+    [Authorize(Policy = "CanUpload3D")]
     public async Task<IActionResult> UploadThreeDFile(Guid id, [FromBody] ThreeDFileDto dto)
     {
         try
@@ -1012,7 +1196,7 @@ public class RequestsController : ControllerBase
     }
 
     [HttpPost("{id:guid}/3d-visualization/complete")]
-    [Authorize(Policy = "ArchitectureDepartment")]
+    [Authorize(Policy = "CanComplete3D")]
     public async Task<IActionResult> CompleteThreeD(Guid id)
     {
         try
@@ -1099,6 +1283,21 @@ public class RequestsController : ControllerBase
         return NoContent();
     }
 
+    [HttpPost("{id:guid}/building-control/complete")]
+    [Authorize(Policy = "CanSubmitBuildingControl")]
+    public async Task<IActionResult> CompleteBuildingControl(Guid id)
+    {
+        try
+        {
+            await _svc.CompleteBuildingControlAsync(id, GetCurrentUserId());
+            return NoContent();
+        }
+        catch (InvalidOperationException exception)
+        {
+            return BadRequest(new { message = exception.Message });
+        }
+    }
+
     // ── Reject (from Submitted or any stage) ────────────────────────────────
     [HttpPost("{id:guid}/initiate")]
     [Authorize(Policy = "ReceptionOfficer")]
@@ -1132,6 +1331,19 @@ public class RequestsController : ControllerBase
         }
     }
 
+    // ── Documents Verification: approve only after each document is validated ─
+    [HttpPost("{id:guid}/documents/verify")]
+    [Authorize(Policy = "CanAdminReview")]
+    public async Task<IActionResult> VerifyDocuments(Guid id, [FromBody] DocumentVerificationDto dto)
+    {
+        try
+        {
+            await _svc.VerifyDocumentsAsync(id, GetCurrentUserId(), dto.Action, dto.Comments);
+            return NoContent();
+        }
+        catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
+    }
+
     // ── Step 13: Final Approval ───────────────────────────────────────────────
     [HttpPost("{id:guid}/final-approval/approve")]
     [Authorize(Policy = "CanFinalApprove")]
@@ -1156,6 +1368,15 @@ public class RequestsController : ControllerBase
     {
         await _svc.DeliverDocumentsAsync(id, GetCurrentUserId(), DDFC.Domain.Enums.SurveyLanguage.EN);
         return NoContent();
+    }
+
+    // ── Document attachment ───────────────────────────────────────────────────
+    [HttpPost("{id:guid}/documents")]
+    [Authorize(Policy = "StaffOrAdmin")]
+    public async Task<IActionResult> AttachDocument(Guid id, [FromBody] AttachDocumentBodyDto dto)
+    {
+        var doc = await _svc.AttachDocumentAsync(id, dto.DocumentType, dto.FileUrl, GetCurrentUserId());
+        return Ok(new RequestDocumentDto(doc.Id.ToString(), doc.DocType, doc.FileUrl, doc.UploadedAt));
     }
 
     // ── History ───────────────────────────────────────────────────────────────
@@ -1211,7 +1432,10 @@ public class RequestsController : ControllerBase
         AuthorizedPersonCnicUrl: r.AuthorizedPersonCnicUrl,
         AuthorizedPersonPhone:   r.AuthorizedPersonPhone,
         AuthorizedPersonName:    r.AuthorizedPersonName,
-        Status:                  r.Status.ToString(),
+        Status:                  r.Status == PossessionRequestStatus.PrincipalArchitectApproved &&
+            activeStepNames?.Any(name => name == "Principal Architect \u2013 Design Review") == true
+                ? PossessionRequestStatus.PrincipalArchitectReviewPending.ToString()
+                : r.Status.ToString(),
         SubmittedAt:             r.SubmittedAt,
         UpdatedAt:               r.UpdatedAt,
         TransferApproved:        r.TransferApproved,
@@ -1303,23 +1527,66 @@ public class RequestsController : ControllerBase
             ca.FileName,
             ca.FileType,
             ca.CompletedAt)),
-        Documents:       r.Documents.Where(d => !d.IsArchived)
-            .Select(d => new RequestDocumentDto(d.Id.ToString(), d.DocType, d.FileUrl, d.UploadedAt))
-            .Concat(r.ArchitecturalPlans
-                .OrderBy(p => p.Version)
-                .Select(p => new RequestDocumentDto(
-                    p.Id.ToString(),
-                    $"Architectural Plan v{p.Version}" + (p.CustomerApproved ? " \u2713" : ""),
-                    p.FileUrl, p.UploadedAt)))
-            .Concat(r.StructuralReports
-                .Select(s => new RequestDocumentDto(s.Id.ToString(), "Structural Report", s.FileUrl, s.CompletedAt)))
-            .Concat(r.MEPReports
-                .Select(m => new RequestDocumentDto(m.Id.ToString(), "MEP Report", m.FileUrl, m.CompletedAt)))
-            .Concat(r.SoilTestReport != null
-                ? new[] { new RequestDocumentDto(r.SoilTestReport.Id.ToString(), "Soil Test Report", r.SoilTestReport.ReportFileUrl, r.SoilTestReport.UploadedAt) }
-                : Array.Empty<RequestDocumentDto>())
-            .OrderBy(d => d.UploadedAt)
+        Documents: GetRequestDocuments(r)
     );
+
+    private static IReadOnlyList<RequestDocumentDto> GetRequestDocuments(PossessionRequest request)
+    {
+        var documents = request.Documents.Where(document => !document.IsArchived)
+            .Select(document => new RequestDocumentDto(document.Id.ToString(), document.DocType,
+                document.FileUrl, document.UploadedAt, document.IsSignedByAdmin)).ToList();
+
+        void Add(string id, string type, string? url, DateTime uploadedAt)
+        {
+            if (!string.IsNullOrWhiteSpace(url))
+                documents.Add(new RequestDocumentDto(id, type, url, uploadedAt));
+        }
+
+        foreach (var plan in request.ArchitecturalPlans)
+        {
+            Add(plan.Id.ToString(), $"Architectural Plan v{plan.Version}" + (plan.CustomerApproved ? " \u2713" : ""), plan.FileUrl, plan.UploadedAt);
+            foreach (var revision in plan.RevisionRequests)
+                Add(revision.Id.ToString(), $"Architectural Plan v{plan.Version} Revision Markup", revision.MarkupFileUrl, revision.RequestedAt);
+        }
+        foreach (var report in request.StructuralReports)
+            Add(report.Id.ToString(), "Structural Report", report.FileUrl, report.CompletedAt);
+        foreach (var report in request.MEPReports)
+            Add(report.Id.ToString(), "MEP Report", report.FileUrl, report.CompletedAt);
+        foreach (var visualization in request.ThreeDVisualizations)
+            Add(visualization.Id.ToString(), "3D Visualization", visualization.FileUrl, visualization.UploadedAt);
+        foreach (var file in request.CadFiles)
+            Add(file.Id.ToString(), "CAD File", file.FileUrl, file.UploadedAt);
+        foreach (var assignment in request.CadAssignments)
+            Add(assignment.Id.ToString(), $"{assignment.CadType} CAD File", assignment.FileUrl, assignment.CompletedAt ?? assignment.AssignedAt);
+        foreach (var payment in request.Payments)
+        {
+            if (payment.Challan is { } challan)
+                Add(challan.Id.ToString(), $"Paid Challan {payment.ChallanNo}", challan.FileUrl, payment.PaidAt ?? challan.GeneratedAt);
+        }
+        if (request.SoilTestReport is { } soilTest)
+            Add(soilTest.Id.ToString(), "Soil Test Report", soilTest.ReportFileUrl, soilTest.UploadedAt);
+        if (request.PossessionCertificate is { } certificate)
+            Add(certificate.Id.ToString(), "Possession Certificate", certificate.FileUrl, certificate.GeneratedAt);
+        if (request.DelayUndertaking is { } delay)
+            Add(delay.Id.ToString(), "Delay Undertaking", delay.UndertakingDocumentUrl, delay.SignedAt ?? delay.RequestedAt ?? delay.CreatedAt);
+        if (request.ArchitectUndertaking is { } architect)
+            Add(architect.Id.ToString(), "Architect Undertaking", architect.SignedDocumentUrl, architect.SignedAt ?? architect.CreatedAt);
+        if (request.PlotAnnexation is { } annexation)
+            Add(annexation.Id.ToString(), "Plot Annexation", annexation.DocumentUrl, annexation.CreatedAt);
+        if (request.PlotMerging is { } merging)
+            Add(merging.Id.ToString(), "Plot Merging", merging.DocumentUrl, merging.CreatedAt);
+
+        Add("legacy-allotment", "Allotment Letter", request.AllotmentLetterUrl, request.SubmittedAt);
+        Add("legacy-cnic", "CNIC", request.CnicUrl, request.SubmittedAt);
+        Add("legacy-message", "Message Screenshot", request.MessageScreenshotUrl, request.SubmittedAt);
+        Add("legacy-stamp", "E-Stamp Paper", request.EStampPaperUrl, request.SubmittedAt);
+        Add("legacy-authorized-cnic", "Authorized Person CNIC", request.AuthorizedPersonCnicUrl, request.SubmittedAt);
+        Add("legacy-soil-test", "Soil Test Report", request.SoilTestReportUrl, request.SubmittedAt);
+
+        return documents.Where(document => !string.IsNullOrWhiteSpace(document.FileUrl))
+            .DistinctBy(document => document.FileUrl, StringComparer.Ordinal)
+            .OrderBy(document => document.UploadedAt).ToList();
+    }
 
     private Guid GetCurrentUserId()
     {
@@ -1330,24 +1597,90 @@ public class RequestsController : ControllerBase
 }
 
 // ── Request body models ───────────────────────────────────────────────────────
-public record ActionNoteDto(string? Comments);
-public record FinanceApproveDto(string? Comments, decimal? AdcAmount);
+public class ActionNoteDto
+{
+    public string? Comments { get; set; }
+}
+
+public class FinanceApproveDto
+{
+    public string? Comments { get; set; }
+    public decimal? AdcAmount { get; set; }
+}
+
 // IssueCertDto is defined in DDFC.Application.Interfaces
-public record SelectPackageDto(Guid PackageId, Guid? InteriorDesignPackageId, Guid? SupervisionPackageId);
-public record ConfirmPaymentDto(string? ChallanNo, decimal AmountPaid, string? ScannedChallanFileUrl);
-public record UploadPlanDto(string FileUrl, string? Notes);
-public record PAInitialReviewDto(
-    Guid      AssignedArchitectId,
-    string?   SoilTestFileUrl,
-    DateTime? SoilTestDate,
-    string?   LabName,
-    string?   SoilBearingCapacity,
-    string?   ResultSummary,
-    string?   Notes);
-public record RevisionDto(string Comments, string? MarkupFileUrl);
-public record ReportDto(string FileUrl, string? Observations);
-public record RequestDelayUndertakingDto(string? DelayReason, int? ExpectedDelayDays, string? Notes);
-public record SignDelayUndertakingRequestDto(string? UndertakingDocumentUrl, string? Notes);
+public class SelectPackageDto
+{
+    public Guid PackageId { get; set; }
+    public Guid? InteriorDesignPackageId { get; set; }
+    public Guid? SupervisionPackageId { get; set; }
+}
+
+public class ConfirmPaymentDto
+{
+    public string? ChallanNo { get; set; }
+    public decimal AmountPaid { get; set; }
+    public string? ScannedChallanFileUrl { get; set; }
+}
+
+public class SubmitPaymentChallanDto
+{
+    public string ChallanNo { get; set; } = string.Empty;
+    public string ScannedChallanFileUrl { get; set; } = string.Empty;
+}
+
+public class ApprovePaymentDto
+{
+    public decimal? AmountPaid { get; set; }
+}
+
+public class UploadPlanDto
+{
+    public string FileUrl { get; set; } = string.Empty;
+    public string? Notes { get; set; }
+}
+
+public class UploadPossessionLetterDto
+{
+    public string FileUrl { get; set; } = string.Empty;
+    public string? Comments { get; set; }
+}
+
+public class PAInitialReviewDto
+{
+    public Guid AssignedArchitectId { get; set; }
+    public string? SoilTestFileUrl { get; set; }
+    public DateTime? SoilTestDate { get; set; }
+    public string? LabName { get; set; }
+    public string? SoilBearingCapacity { get; set; }
+    public string? ResultSummary { get; set; }
+    public string? Notes { get; set; }
+}
+
+public class RevisionDto
+{
+    public string Comments { get; set; } = string.Empty;
+    public string? MarkupFileUrl { get; set; }
+}
+
+public class ReportDto
+{
+    public string FileUrl { get; set; } = string.Empty;
+    public string? Observations { get; set; }
+}
+
+public class RequestDelayUndertakingDto
+{
+    public string? DelayReason { get; set; }
+    public int? ExpectedDelayDays { get; set; }
+    public string? Notes { get; set; }
+}
+
+public class SignDelayUndertakingRequestDto
+{
+    public string? UndertakingDocumentUrl { get; set; }
+    public string? Notes { get; set; }
+}
 
 // ── Response DTOs ─────────────────────────────────────────────────────────────
 public record WorkflowHistoryDto(
@@ -1443,15 +1776,51 @@ public record RequestDocumentDto(
     string   DocumentId,
     string   DocumentType,
     string   FileUrl,
-    DateTime UploadedAt
+    DateTime UploadedAt,
+    bool IsSignedByAdmin = false
 );
 
 // ── New request body DTOs ─────────────────────────────────────────────────────
-public record AttachUndertakingDto(string SignedDocumentUrl, int HoldDays, string? Notes);
-public record AnnexationDto(string? AdditionalArea, decimal AnnexationFee, string? Notes);
-public record PlotMergeDto(string MergedPlotNumber, string MergedPlotSector, string? MergedPlotSize, string? Notes);
-public record CadAssignmentRequestDto(string CadType, Guid AssignedUserId);
-public record DeptCadFileDto(string FileUrl, string? FileName, string? FileType);
+public class AttachUndertakingDto
+{
+    public string SignedDocumentUrl { get; set; } = string.Empty;
+    public int HoldDays { get; set; }
+    public string? Notes { get; set; }
+}
+
+public class AttachDocumentBodyDto
+{
+    public DDFC.Domain.Enums.DocumentType DocumentType { get; set; }
+    public string FileUrl { get; set; } = string.Empty;
+}
+
+public class AnnexationDto
+{
+    public string? AdditionalArea { get; set; }
+    public decimal AnnexationFee { get; set; }
+    public string? Notes { get; set; }
+}
+
+public class PlotMergeDto
+{
+    public string MergedPlotNumber { get; set; } = string.Empty;
+    public string MergedPlotSector { get; set; } = string.Empty;
+    public string? MergedPlotSize { get; set; }
+    public string? Notes { get; set; }
+}
+
+public class CadAssignmentRequestDto
+{
+    public string CadType { get; set; } = string.Empty;
+    public Guid AssignedUserId { get; set; }
+}
+
+public class DeptCadFileDto
+{
+    public string FileUrl { get; set; } = string.Empty;
+    public string? FileName { get; set; }
+    public string? FileType { get; set; }
+}
 
 // ── New response DTOs ─────────────────────────────────────────────────────────
 public record ArchitectUndertakingDto(

@@ -209,6 +209,15 @@ export const requestsService = {
   financeReject: (id: string, data: { comments?: string }) =>
     api.post(`/requests/${id}/finance/reject`, data).then((r) => r.data),
 
+  adCoordApprove: (id: string, data: { comments?: string }) =>
+    api.post(`/requests/${id}/ad-coord/approve`, data).then((r) => r.data),
+
+  adCoordReject: (id: string, data: { comments?: string }) =>
+    api.post(`/requests/${id}/ad-coord/reject`, data).then((r) => r.data),
+
+  bcdUploadPossessionLetter: (id: string, data: { fileUrl: string; comments?: string }) =>
+    api.post(`/requests/${id}/bcd/upload-possession-letter`, data).then((r) => r.data),
+
   ddfcAdminSign: (id: string, data: {
     handedOverBy?: string;
     handedOverDate?: string;
@@ -283,6 +292,12 @@ export const requestsService = {
   confirmPayment: (id: string, data: { challanNo?: string; amountPaid: number; scannedChallanFileUrl?: string }) =>
     api.post(`/requests/${id}/payment/confirm`, data).then((r) => r.data),
 
+  submitPaymentChallan: (id: string, data: { challanNo: string; scannedChallanFileUrl: string }) =>
+    api.post(`/requests/${id}/payment/submit-challan`, data).then((r) => r.data),
+
+  approvePayment: (id: string, data?: { amountPaid?: number }) =>
+    api.post(`/requests/${id}/payment/approve`, data ?? {}).then((r) => r.data),
+
   // Backend expects JSON { fileUrl, notes } not multipart
   uploadPlan: (id: string, data: { fileUrl: string; notes?: string }) =>
     api.post<ArchitecturalPlan>(`/requests/${id}/plan`, data).then((r) => r.data),
@@ -317,6 +332,11 @@ export const requestsService = {
   principalApprove: (id: string, data: { comments?: string }) =>
     api.post(`/requests/${id}/principal-review/approve`, data).then((r) => r.data),
 
+  submitInitialSoilTest: (id: string, data: {
+    testDate: string; labName: string; soilBearingCapacity: string;
+    resultSummary: string; reportFileUrl: string;
+  }) => api.post(`/requests/${id}/soil-test/initial`, data).then((r) => r.data),
+
   paInitialReview: (id: string, data: {
     assignedArchitectId: string;
     soilTestFileUrl?: string;
@@ -340,6 +360,9 @@ export const requestsService = {
     violations?: string; suggestions?: string; photoUrlsJson?: string;
   }) => api.post(`/requests/${id}/building-control`, data).then((r) => r.data),
 
+  completeBuildingControl: (id: string) =>
+    api.post(`/requests/${id}/building-control/complete`).then((response) => response.data),
+
   finalApprove: (id: string, data: { comments?: string }) =>
     api.post(`/requests/${id}/final-approval/approve`, data).then((r) => r.data),
 
@@ -352,6 +375,7 @@ export const requestsService = {
   adminReview: (id: string, data: {
     action: string;
     rejectionReason?: string;
+    incompleteDocumentType?: string;
     allotmentLetterUrl?: string;
     cnicUrl?: string;
     messageScreenshotUrl?: string;
@@ -361,11 +385,24 @@ export const requestsService = {
   }) =>
     api.post(`/requests/${id}/admin-review`, data).then((r) => r.data),
 
+  verifyDocuments: (id: string, data: { action: 'Approve' | 'Incomplete'; comments?: string }) =>
+    api.post(`/requests/${id}/documents/verify`, data).then((r) => r.data),
+
   initiateRequest: (id: string, data: { comments?: string }) =>
     api.post(`/requests/${id}/initiate`, data).then((r) => r.data),
 
   deliver: (id: string, data: { comments?: string }) =>
     api.post(`/requests/${id}/deliver`, data).then((r) => r.data),
+
+  attachDocument: (id: string, data: { documentType: string; fileUrl: string }) =>
+    api.post(`/requests/${id}/documents`, data).then((r) => r.data),
+
+  issuePossessionCert: (id: string, data: {
+    handedOverBy?: string; handedOverDate?: string;
+    takenOverBy?: string; takenOverDate?: string;
+    chiefSurveyorName?: string; adTpBcdName?: string;
+  }) =>
+    api.post(`/requests/${id}/ddfc-admin/sign`, data).then((r) => r.data),
 };
 
 // ─── Packages ────────────────────────────────────────────────────────────────

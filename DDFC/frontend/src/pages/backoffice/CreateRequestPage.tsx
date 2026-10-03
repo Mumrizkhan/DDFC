@@ -4,10 +4,11 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { ArrowLeft, Send, Home, RefreshCw, Ruler } from 'lucide-react';
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
-import { createRequest } from '../../store/slices/requestsSlice';
+import { createRequest, attachDocument } from '../../store/slices/requestsSlice';
 import { Card } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
+import { FileUploadButton } from '../../components/ui/FileUploadButton';
 import { toast } from 'react-toastify';
 import api from '../../services/api';
 import type { Customer, Plot, PossessionRequest } from '../../types';
@@ -62,6 +63,12 @@ export const CreateRequestPage: React.FC = () => {
 
   // Stores pending plot data during linked-request auto-fill cascade
   const autoFillRef = useRef<{ sectorNo: string; plotType: string; plotId: string; plotNumber: string } | null>(null);
+
+  // Mandatory documents (Reception – Step 1): up to 2 per type
+  const [cnicUrls,        setCnicUrls]        = useState<string[]>([]);
+  const [nocNdcUrls,      setNocNdcUrls]      = useState<string[]>([]);
+  const [allotmentUrls,   setAllotmentUrls]   = useState<string[]>([]);
+  const [docError,        setDocError]        = useState('');
 
   const {
     register,
@@ -236,10 +243,18 @@ export const CreateRequestPage: React.FC = () => {
       setLinkedRequestError('Please select the linked possession request');
       return;
     }
+    // Mandatory documents (only required for Possession & Design workflow)
+    if (workflowType === 0) {
+      if (cnicUrls.length === 0 || nocNdcUrls.length === 0 || allotmentUrls.length === 0) {
+        setDocError('CNIC, NOC/NDC Form, and Allotment Letter documents are required.');
+        return;
+      }
+    }
     setPlotError('');
     setLinkedRequestError('');
+    setDocError('');
     try {
-      await dispatch(
+      const created = await dispatch(
         createRequest({
           customerId: data.customerId,
           plotId: selectedPlotId,
@@ -258,6 +273,20 @@ export const CreateRequestPage: React.FC = () => {
           linkedPossessionRequestId: workflowType !== 0 ? linkedRequestId : undefined,
         })
       ).unwrap();
+
+      // Attach mandatory documents for Possession & Design workflow
+      if (workflowType === 0 && created?.id) {
+        const reqId = created.id;
+        const docUploads: Array<{ documentType: string; fileUrl: string }> = [
+          ...cnicUrls.map((u) => ({ documentType: 'Cnic', fileUrl: u })),
+          ...nocNdcUrls.map((u) => ({ documentType: 'NocNdcForm', fileUrl: u })),
+          ...allotmentUrls.map((u) => ({ documentType: 'AllotmentLetter', fileUrl: u })),
+        ];
+        for (const d of docUploads) {
+          await dispatch(attachDocument({ id: reqId, ...d })).unwrap();
+        }
+      }
+
       toast.success('Request created successfully!');
       reset();
       navigate('/backoffice/requests');
@@ -449,6 +478,103 @@ export const CreateRequestPage: React.FC = () => {
           </div>
 
           <OwnerInfoSection register={register} errors={errors} watchedRelation={watch('guardianRelation')} />
+
+          {/* ── Mandatory Documents (Possession & Design only) ──────────── */}
+          {workflowType === 0 && (
+            <div className="border rounded-xl p-4 space-y-5 bg-blue-50 border-blue-200">
+              <h3 className="text-sm font-semibold text-blue-800">
+                Mandatory Documents <span className="text-red-500">*</span>
+              </h3>
+              <p className="text-xs text-blue-600 -mt-3">
+                Upload up to 2 files per document type. All three types are required.
+              </p>
+
+              {/* CNIC */}
+              <div>
+                <p className="text-sm font-medium text-gray-700 mb-1">
+                  CNIC <span className="text-red-500">*</span>
+                  <span className="text-xs text-gray-400 ml-2">({cnicUrls.length}/2 uploaded)</span>
+                </p>
+                <div className="flex gap-2 flex-wrap">
+                  {cnicUrls.length < 2 && (
+                    <FileUploadButton
+                      label="Upload CNIC"
+                      onUploaded={(url) => setCnicUrls((prev) => [...prev, url])}
+                    />
+                  )}
+                  {cnicUrls.map((url, i) => (
+                    <div key={i} className="flex items-center gap-1 text-xs bg-white border rounded px-2 py-1">
+                      <span className="text-green-600">✓</span>
+                      <span className="truncate max-w-[140px]">{url.split('/').pop()}</span>
+                      <button
+                        type="button"
+                        className="text-red-400 hover:text-red-600 ml-1"
+                        onClick={() => setCnicUrls((prev) => prev.filter((_, j) => j !== i))}
+                      >×</button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* NOC/NDC Form */}
+              <div>
+                <p className="text-sm font-medium text-gray-700 mb-1">
+                  NOC/NDC Form <span className="text-red-500">*</span>
+                  <span className="text-xs text-gray-400 ml-2">({nocNdcUrls.length}/2 uploaded)</span>
+                </p>
+                <div className="flex gap-2 flex-wrap">
+                  {nocNdcUrls.length < 2 && (
+                    <FileUploadButton
+                      label="Upload NOC/NDC Form"
+                      onUploaded={(url) => setNocNdcUrls((prev) => [...prev, url])}
+                    />
+                  )}
+                  {nocNdcUrls.map((url, i) => (
+                    <div key={i} className="flex items-center gap-1 text-xs bg-white border rounded px-2 py-1">
+                      <span className="text-green-600">✓</span>
+                      <span className="truncate max-w-[140px]">{url.split('/').pop()}</span>
+                      <button
+                        type="button"
+                        className="text-red-400 hover:text-red-600 ml-1"
+                        onClick={() => setNocNdcUrls((prev) => prev.filter((_, j) => j !== i))}
+                      >×</button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Allotment Letter */}
+              <div>
+                <p className="text-sm font-medium text-gray-700 mb-1">
+                  Allotment Letter <span className="text-red-500">*</span>
+                  <span className="text-xs text-gray-400 ml-2">({allotmentUrls.length}/2 uploaded)</span>
+                </p>
+                <div className="flex gap-2 flex-wrap">
+                  {allotmentUrls.length < 2 && (
+                    <FileUploadButton
+                      label="Upload Allotment Letter"
+                      onUploaded={(url) => setAllotmentUrls((prev) => [...prev, url])}
+                    />
+                  )}
+                  {allotmentUrls.map((url, i) => (
+                    <div key={i} className="flex items-center gap-1 text-xs bg-white border rounded px-2 py-1">
+                      <span className="text-green-600">✓</span>
+                      <span className="truncate max-w-[140px]">{url.split('/').pop()}</span>
+                      <button
+                        type="button"
+                        className="text-red-400 hover:text-red-600 ml-1"
+                        onClick={() => setAllotmentUrls((prev) => prev.filter((_, j) => j !== i))}
+                      >×</button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {docError && (
+                <p className="text-xs text-red-600">{docError}</p>
+              )}
+            </div>
+          )}
 
           <div className="flex gap-3 pt-4 border-t">
             <Button variant="secondary" onClick={() => navigate('/backoffice/requests')}>

@@ -49,4 +49,7 @@ public class NotificationsController : ControllerBase
     private Guid GetCustomerId() => Guid.Parse(User.FindFirst("customerId")!.Value);
 }
 
-public record RespondDto(string ResponseText);
+public class RespondDto
+{
+    public string ResponseText { get; set; } = string.Empty;
+}

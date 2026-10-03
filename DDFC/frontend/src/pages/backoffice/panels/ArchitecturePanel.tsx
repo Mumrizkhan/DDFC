@@ -44,6 +44,31 @@ export const ArchitecturePanel: React.FC<Props> = ({ request, requestId }) => {
     }
   };
 
+  if (request.status === 'ThreeDDraftPending') {
+    return (
+      <Card title="Architect Draft">
+        <div className="space-y-5">
+          <CadSection
+            cadType="ThreeD"
+            label="Drafter Draft"
+            assigneeRole="3D Operator"
+            requestId={requestId}
+            request={request}
+            accentClass="border-gray-200 bg-gray-50"
+          />
+          <CadSection
+            cadType="ArchitectDraft"
+            label="Architect Draft"
+            assigneeRole="Architect"
+            requestId={requestId}
+            request={request}
+            accentClass="border-gray-200 bg-gray-50"
+          />
+        </div>
+      </Card>
+    );
+  }
+
   return (
     <Card title="Architect Panel">
       <div className="space-y-6">

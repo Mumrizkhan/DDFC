@@ -1,59 +1,111 @@
 import React, { useState } from 'react';
 import { CheckCircle, Clock, Circle, ChevronDown, ChevronUp } from 'lucide-react';
-import type { RequestStatus } from '../../types';
+import type { RequestStatus, RequestType } from '../../types';
 
-const WORKFLOW_STEPS: { status: RequestStatus; label: string }[] = [
-  { status: 'Submitted', label: 'Submitted' },
-  { status: 'Initiated', label: 'Initiated' },
-  { status: 'TransferApproved', label: 'Transfer' },
-  { status: 'FinanceApproved', label: 'Finance' },
-  { status: 'BothBranchesCleared', label: 'Building Control' },
-  { status: 'PossessionLetterSigned', label: 'Admin Signed' },
-  { status: 'PackageSelected', label: 'Package' },
-  { status: 'PackagePaid', label: 'Payment' },
-  { status: 'ArchitectAssigned', label: 'Principal Architect' },
-  { status: 'ArchitectureApproved', label: 'Architect' },
-  { status: 'ThreeDCompleted', label: '3D' },
-  { status: 'StructureCompleted', label: 'Structure' },
-  { status: 'MEPCompleted', label: 'MEP' },
-  { status: 'PrincipalArchitectApproved', label: 'Principal Arch.' },
-  { status: 'BuildingControlCompleted', label: 'Building Control' },
-  { status: 'FinalApproved', label: 'Final Approval' },
-  { status: 'Delivered', label: 'Delivered' },
+type StepDef = { status: RequestStatus; label: string };
+
+// ── DDFC Possession & House Design Workflow (20 steps) ──────────────────────
+const DDFC_STEPS: StepDef[] = [
+  { status: 'Submitted',                 label: 'Submitted' },
+  { status: 'DocumentsVerification',         label: 'Documents Verification' },
+  { status: 'TransferApproved',          label: 'Transfer' },
+  { status: 'FinanceApproved',           label: 'Finance' },
+  { status: 'AdCoordApproved',           label: 'AD Coordinator' },
+  { status: 'BcdLetterUploaded',         label: 'BCD' },
+  { status: 'PossessionLetterSigned',    label: 'Admin' },
+  { status: 'PackageSelected',           label: 'Package' },
+  { status: 'PackagePaid',               label: 'Payment' },
+  { status: 'AdminReviewPending',        label: 'Admin Review' },
+  { status: 'SoilTestCompleted',         label: 'Soil Test' },
+  { status: 'ArchitectAssigned',         label: 'Principal Architect' },
+  { status: 'ArchitectureApproved',      label: 'Architect' },
+  { status: 'ThreeDCompleted',           label: '3D' },
+  { status: 'ThreeDDraftPending',        label: 'Architect Draft' },
+  { status: 'StructureCompleted',        label: 'Structure' },
+  { status: 'MEPCompleted',              label: 'MEP' },
+  { status: 'PrincipalArchitectApproved', label: 'Principal Architect Review' },
+  { status: 'BuildingControlCompleted',  label: 'Building Control' },
+  { status: 'FinalApproved',             label: 'Final Approval' },
+  { status: 'Delivered',                 label: 'Delivered' },
 ];
 
-/** Maps WorkflowEngine step names to the stepper status they represent. */
-const WE_STEP_TO_STATUS: Record<string, RequestStatus> = {
-  'Reception – Submit NOC/NDC Request':          'Initiated',
-  'Transfer Branch – NOC/NDC Review':            'TransferApproved',
-  'Finance Branch – Dues Clearance':             'FinanceApproved',
-  'DDFC Admin – Sign Possession Letter':         'PossessionLetterSigned',
-  'Reception – Package Selection':               'PackageSelected',
-  'Finance Branch – Payment Confirmation':       'PackagePaid',
-  'Principal Architect – Initial Review':         'ArchitectAssigned',
-  'Architect Department – House Plan Design': 'ArchitectureApproved',
-  'Architecture Department – 3D Visualization':  'ThreeDCompleted',
-  'Structure Department – Structural Design':    'StructureCompleted',
-  'MEP Department – MEP Design':                 'MEPCompleted',
-  'Principal Architect – Design Review':         'PrincipalArchitectApproved',
-  'Building Control – Physical Survey':          'BuildingControlCompleted',
-  'DHA Design Head – Final Approval':            'FinalApproved',
-  'Reception – Document Delivery':               'Delivered',
+// ── Revised Plan / As-Built Plan Workflow (13 steps — no Transfer/Finance/DDFC Admin) ─
+const REVISED_STEPS: StepDef[] = [
+  { status: 'Submitted',                  label: 'Submitted' },
+  { status: 'DocumentsVerification',          label: 'Documents Verification' },
+  { status: 'PackageSelected',            label: 'Package' },
+  { status: 'PackagePaid',                label: 'Payment' },
+  { status: 'ArchitectAssigned',          label: 'Principal Architect' },
+  { status: 'ArchitectureApproved',       label: 'Architect' },
+  { status: 'ThreeDCompleted',            label: '3D' },
+  { status: 'StructureCompleted',         label: 'Structure' },
+  { status: 'MEPCompleted',               label: 'MEP' },
+  { status: 'PrincipalArchitectApproved', label: 'Principal Architect Review' },
+  { status: 'BuildingControlCompleted',   label: 'Building Control' },
+  { status: 'FinalApproved',              label: 'Final Approval' },
+  { status: 'Delivered',                  label: 'Delivered' },
+];
+
+// Maps WorkflowEngine step name → the status that step represents in the stepper.
+const DDFC_WE_MAP: Record<string, RequestStatus> = {
+  'Reception \u2013 Submit NOC/NDC Request':         'Submitted',
+  'Reception \u2013 Documents Verification':        'DocumentsVerification',
+  'Admin \u2013 Document Review':                    'DocumentsVerification',
+  'Transfer Branch \u2013 NOC/NDC Review':           'TransferApproved',
+  'Finance Branch \u2013 Dues Clearance':            'FinanceApproved',
+  'AD Coordinator \u2013 Review':                    'AdCoordApproved',
+  'BCD \u2013 Upload Possession Letter':             'BcdLetterUploaded',
+  'DDFC Admin \u2013 Sign Possession Letter':        'PossessionLetterSigned',
+  'Reception \u2013 Package Selection':              'PackageSelected',
+  'Reception \u2013 Payment Confirmation':           'PackagePaid',
+  'Admin \u2013 Post-Payment Review':                'AdminReviewPending',
+  'Soil Test':                                       'SoilTestCompleted',
+  'Principal Architect \u2013 Initial Review':       'ArchitectAssigned',
+  'Architect Department \u2013 House Plan Design':   'ArchitectureApproved',
+  'Architecture Department \u2013 3D Visualization': 'ThreeDCompleted',
+  'Architect \u2013 Assign 3D Drafter & Upload Draft': 'ThreeDDraftPending',
+  'Structure Department \u2013 Structural Design':   'StructureCompleted',
+  'MEP Department \u2013 MEP Design':                'MEPCompleted',
+  'Principal Architect \u2013 Design Review':        'PrincipalArchitectApproved',
+  'Building Control \u2013 Physical Survey':         'BuildingControlCompleted',
+  'DHA Design Head \u2013 Final Approval':           'FinalApproved',
+  'Reception \u2013 Document Delivery':              'Delivered',
 };
 
-const STATUS_ORDER = WORKFLOW_STEPS.map((s) => s.status);
-const TOTAL = WORKFLOW_STEPS.length;
+const REVISED_WE_MAP: Record<string, RequestStatus> = {
+  'Reception \u2013 Submit NOC/NDC Request':         'Submitted',
+  'Admin \u2013 Document Review':                    'DocumentsVerification',
+  'Reception \u2013 Package Selection':              'PackageSelected',
+  'Reception \u2013 Payment Confirmation':           'PackagePaid',
+  'Principal Architect \u2013 Initial Review':       'ArchitectAssigned',
+  'Architect Department \u2013 House Plan Design':   'ArchitectureApproved',
+  'Architecture Department \u2013 3D Visualization': 'ThreeDCompleted',
+  'Structure Department \u2013 Structural Design':   'StructureCompleted',
+  'MEP Department \u2013 MEP Design':                'MEPCompleted',
+  'Principal Architect \u2013 Design Review':        'PrincipalArchitectApproved',
+  'Building Control \u2013 Physical Survey':         'BuildingControlCompleted',
+  'DHA Design Head \u2013 Final Approval':           'FinalApproved',
+  'Reception \u2013 Document Delivery':              'Delivered',
+};
 
 interface WorkflowStepperProps {
   currentStatus: RequestStatus;
   activeStepNames?: string[];
+  requestType?: RequestType;
 }
 
 export const WorkflowStepper: React.FC<WorkflowStepperProps> = ({
   currentStatus,
   activeStepNames,
+  requestType,
 }) => {
   const [expanded, setExpanded] = useState(false);
+
+  const isDdfc = !requestType || requestType === 'PossessionDesign';
+  const WORKFLOW_STEPS = isDdfc ? DDFC_STEPS : REVISED_STEPS;
+  const WE_STEP_TO_STATUS = isDdfc ? DDFC_WE_MAP : REVISED_WE_MAP;
+  const STATUS_ORDER = WORKFLOW_STEPS.map((s) => s.status);
+  const TOTAL = WORKFLOW_STEPS.length;
 
   const weActiveIndices: Set<number> = React.useMemo(() => {
     if (!activeStepNames || activeStepNames.length === 0) return new Set();
@@ -66,10 +118,13 @@ export const WorkflowStepper: React.FC<WorkflowStepperProps> = ({
       }
     }
     return indices;
-  }, [activeStepNames]);
+  }, [activeStepNames, STATUS_ORDER, WE_STEP_TO_STATUS]);
 
   const hasWeData = weActiveIndices.size > 0;
-  const fallbackIdx = STATUS_ORDER.indexOf(currentStatus);
+  // BothBranchesCleared is not a stepper step; map it to AD Coordinator (in progress)
+  const resolvedStatus = currentStatus === 'BothBranchesCleared' ? 'AdCoordApproved'
+    : currentStatus === 'PrincipalArchitectReviewPending' ? 'PrincipalArchitectApproved' : currentStatus;
+  const fallbackIdx = STATUS_ORDER.indexOf(resolvedStatus);
   const minActiveIdx = hasWeData ? Math.min(...weActiveIndices) : fallbackIdx;
 
   // 1-based step number, clamped

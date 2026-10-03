@@ -3,9 +3,10 @@ import { CheckCircle, DollarSign, XCircle } from 'lucide-react';
 import { Card } from '../../../components/ui/Card';
 import { Input } from '../../../components/ui/Input';
 import { Button } from '../../../components/ui/Button';
+import { FileUploadButton } from '../../../components/ui/FileUploadButton';
 import type { PossessionRequest } from '../../../types';
 import { useAppDispatch } from '../../../store/hooks';
-import { financeApprove, financeReject, confirmPayment } from '../../../store/slices/requestsSlice';
+import { financeApprove, financeReject, confirmPayment, attachDocument } from '../../../store/slices/requestsSlice';
 import { toast } from 'react-toastify';
 
 interface Props {
@@ -24,6 +25,10 @@ export const FinancePanel: React.FC<Props> = ({ request, requestId }) => {
   const [submittingApprove, setSubmittingApprove] = useState(false);
   const [submittingReject, setSubmittingReject] = useState(false);
   const [submittingPayment, setSubmittingPayment] = useState(false);
+
+  // Plot Finance Statement document
+  const [financeStatementUrls, setFinanceStatementUrls] = useState<string[]>([]);
+  const [submittingDoc, setSubmittingDoc] = useState(false);
 
   const handleFinanceApprove = async () => {
     setSubmittingApprove(true);
@@ -59,8 +64,20 @@ export const FinancePanel: React.FC<Props> = ({ request, requestId }) => {
     }
   };
 
-  const handleConfirmPayment = async () => {
-    if (!amountPaid || !challanNo.trim()) return;
+  const handleAttachFinanceStatement = async (url: string) => {
+    setSubmittingDoc(true);
+    try {
+      await dispatch(attachDocument({ id: requestId, documentType: 'PlotFinanceStatement', fileUrl: url })).unwrap();
+      setFinanceStatementUrls((prev) => [...prev, url]);
+      toast.success('Plot Finance Statement attached');
+    } catch {
+      toast.error('Failed to attach document');
+    } finally {
+      setSubmittingDoc(false);
+    }
+  };
+
+  const handleConfirmPayment = async () => {    if (!amountPaid || !challanNo.trim()) return;
     setSubmittingPayment(true);
     try {
       await dispatch(
@@ -77,6 +94,12 @@ export const FinancePanel: React.FC<Props> = ({ request, requestId }) => {
   };
 
   const unpaidPayments = (request.payments ?? []).filter((p) => !p.isPaid);
+
+  // Existing Plot Finance Statement docs on this request
+  const existingFinanceDocs = (request.documents ?? []).filter(
+    (d) => d.documentType === 'Plot Finance Statement'
+  );
+  const totalFinanceDocs = existingFinanceDocs.length + financeStatementUrls.length;
 
   return (
     <Card title="Finance Branch Panel">
@@ -148,6 +171,34 @@ export const FinancePanel: React.FC<Props> = ({ request, requestId }) => {
             </Button>
           </div>
         )}
+
+        {/* Plot Finance Statement */}
+        <div className="border rounded-xl p-4 space-y-3 bg-amber-50 border-amber-200">
+          <h3 className="text-sm font-semibold text-amber-800">
+            Plot Finance Statement <span className="text-red-500">*</span>
+            <span className="text-xs text-amber-600 font-normal ml-2">({totalFinanceDocs}/2 uploaded)</span>
+          </h3>
+          {existingFinanceDocs.length > 0 && (
+            <div className="space-y-1">
+              {existingFinanceDocs.map((d) => (
+                <div key={d.documentId} className="flex items-center gap-1 text-xs bg-white border rounded px-2 py-1">
+                  <span className="text-green-600">✓</span>
+                  <a href={d.fileUrl} target="_blank" rel="noreferrer" className="truncate max-w-[200px] underline text-blue-600">
+                    {d.fileUrl.split('/').pop()}
+                  </a>
+                </div>
+              ))}
+            </div>
+          )}
+          {totalFinanceDocs < 2 && (
+            <FileUploadButton
+              label="Upload Plot Finance Statement"
+              required={totalFinanceDocs === 0}
+              onUploaded={handleAttachFinanceStatement}
+            />
+          )}
+          {submittingDoc && <p className="text-xs text-amber-600">Attaching document…</p>}
+        </div>
 
         {/* Finance approval */}
         <div>

@@ -217,6 +217,21 @@ public class WorkflowEngineService : IWorkflowEngine
             action.StepAction?.Name ?? "Unknown",
             performedBy);
 
+        // Check if this is a loopback action (step stays active, all actions reset for re-review)
+        if (action.StepAction?.IsLoopbackAction == true)
+        {
+            var loopbackStep = action.RequestStep;
+            _logger.LogInformation(
+                "Loopback action {ActionId} ({ActionName}) completed for request {RequestId} - resetting step for re-review",
+                action.Id, action.StepAction.Name, loopbackStep.Request.Id);
+
+            foreach (var a in loopbackStep.Actions)
+                a.Status = RequestActionStatus.Pending;
+
+            await _repo.SaveChangesAsync();
+            return; // Step remains Active
+        }
+
         // Check if this is a rejection action
         if (action.StepAction?.IsRejectionAction == true)
         {
@@ -368,16 +383,20 @@ public class WorkflowEngineService : IWorkflowEngine
                 break;
 
             case ActionCompletionMode.Any:
-                // Any action with data completes the step
+                // In approval/review steps, any single completed action should complete the step.
+                // This is required for flows like "Assign Architect" where the optional soil-test
+                // upload is not mandatory and should not block the handoff to the Architect step.
+                shouldComplete = completedActions > 0;
                 if (!string.IsNullOrEmpty(lastActionData))
                 {
-                    shouldComplete = true;
                     stepData = lastActionData;
                 }
                 else
                 {
-                    // No data provided, check if all actions are done (backward compatibility)
-                    shouldComplete = completedActions == totalActions;
+                    stepData = step.Actions
+                        .Where(a => a.Status == RequestActionStatus.Completed && !string.IsNullOrEmpty(a.Data))
+                        .OrderByDescending(a => a.PerformedAt)
+                        .FirstOrDefault()?.Data;
                 }
                 break;
 

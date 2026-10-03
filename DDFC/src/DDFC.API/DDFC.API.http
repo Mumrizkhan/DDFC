@@ -4,3 +4,13 @@ GET {{DDFC.API_HostAddress}}/weatherforecast/
 Accept: application/json
 
 ###
+
+@requestId = 00000000-0000-0000-0000-000000000000
+@staffToken =
+
+### Complete step 19 Building Control after final-document review
+POST {{DDFC.API_HostAddress}}/api/v1/requests/{{requestId}}/building-control/complete
+Authorization: Bearer {{staffToken}}
+Accept: application/json
+
+###

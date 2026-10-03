@@ -7,7 +7,6 @@ import type { PossessionRequest } from '../../../types';
 import { useAppDispatch } from '../../../store/hooks';
 import { ddfcAdminSign } from '../../../store/slices/requestsSlice';
 import { toast } from 'react-toastify';
-import api from '../../../services/api';
 
 interface Props {
   request: PossessionRequest;
@@ -17,6 +16,9 @@ interface Props {
 export const DdfcAdminPanel: React.FC<Props> = ({ request, requestId }) => {
   const dispatch = useAppDispatch();
   const [signing, setSigning] = useState(false);
+  const possessionLetter = (request.documents ?? [])
+    .filter((document) => document.documentType === 'Possession Letter')
+    .sort((first, second) => new Date(second.uploadedAt).getTime() - new Date(first.uploadedAt).getTime())[0];
 
   const [handedOverBy, setHandedOverBy]     = useState('');
   const [handedOverDate, setHandedOverDate] = useState('');
@@ -26,6 +28,10 @@ export const DdfcAdminPanel: React.FC<Props> = ({ request, requestId }) => {
   const [adTpBcd, setAdTpBcd]               = useState('');
 
   const handleSign = async () => {
+    if (!possessionLetter?.fileUrl) {
+      toast.error('BCD must upload the possession letter first');
+      return;
+    }
     if (!handedOverBy.trim() || !takenOverBy.trim()) {
       toast.error('Handed-over-by and taken-over-by are required');
       return;
@@ -40,6 +46,7 @@ export const DdfcAdminPanel: React.FC<Props> = ({ request, requestId }) => {
         takenOverDate:     takenOverDate || undefined,
         chiefSurveyorName: chiefSurveyor.trim() || undefined,
         adTpBcdName:       adTpBcd.trim() || undefined,
+        possessionLetterFileUrl: possessionLetter.fileUrl,
       })).unwrap();
       toast.success('Possession letter signed successfully');
     } catch {
@@ -50,12 +57,14 @@ export const DdfcAdminPanel: React.FC<Props> = ({ request, requestId }) => {
   };
 
   const handlePrint = () => {
-    const url = `${api.defaults.baseURL}/requests/${requestId}/possession-certificate/preview`;
-    const win = window.open(url, '_blank');
-    if (!win) toast.warn('Popup blocked — please allow popups and try again');
+    if (!possessionLetter?.fileUrl) {
+      toast.error('No BCD possession letter is attached');
+      return;
+    }
+    window.open(possessionLetter.fileUrl, '_blank', 'noopener,noreferrer');
   };
 
-  const canSign = request.status === 'BothBranchesCleared' || request.status === 'PossessionIssued';
+  const canSign = request.status === 'BcdLetterUploaded' && !possessionLetter?.isSignedByAdmin;
 
   return (
     <Card title="DDFC Admin – Sign Possession Letter">
@@ -143,6 +152,7 @@ export const DdfcAdminPanel: React.FC<Props> = ({ request, requestId }) => {
                 variant="primary"
                 className="w-full"
                 loading={signing}
+                disabled={!possessionLetter?.fileUrl}
                 onClick={handleSign}
                 icon={<PenLine size={16} />}
               >

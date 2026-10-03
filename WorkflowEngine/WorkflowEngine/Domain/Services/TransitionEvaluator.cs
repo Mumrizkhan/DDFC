@@ -50,11 +50,15 @@ public static class TransitionEvaluator
 
             bool conditionMatches = false;
 
-            // Default transition (no condition) or when no data available
-            if (string.IsNullOrEmpty(transition.Condition) || transition.IsDefault)
+            // Unconditional transitions must always be eligible, even when the completed
+            // step includes data (for example approval payloads like {"approved":true}).
+            if (string.IsNullOrEmpty(transition.Condition))
             {
-                if (data == null || transition.IsDefault)
-                    conditionMatches = true;
+                conditionMatches = true;
+            }
+            else if (transition.IsDefault && (data == null || transition.IsDefault))
+            {
+                conditionMatches = true;
             }
             // If we have data, evaluate the condition
             else if (data != null && EvaluateCondition(transition.Condition, data))

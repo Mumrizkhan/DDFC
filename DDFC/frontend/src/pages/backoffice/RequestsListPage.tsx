@@ -12,14 +12,19 @@ import { format } from 'date-fns';
 const STATUS_OPTIONS: { value: string; label: string }[] = [
   { value: '', label: 'All Statuses' },
   { value: 'Submitted', label: 'Submitted' },
-  { value: 'Initiated', label: 'Initiated' },
+  { value: 'DocumentsVerification', label: 'Documents Verification' },
   { value: 'TransferApproved', label: 'Transfer Approved' },
   { value: 'FinanceApproved', label: 'Finance Approved' },
   { value: 'BothBranchesCleared', label: 'Pending Possession' },
+  { value: 'AdminReviewPending', label: 'Admin Review Pending' },
+  { value: 'AdCoordApproved', label: 'AD Coordinator Approved' },
+  { value: 'BcdLetterUploaded', label: 'BCD Letter Uploaded' },
   { value: 'PossessionIssued', label: 'Possession Issued' },
   { value: 'PackageSelected', label: 'Package Selected' },
   { value: 'PackagePaid', label: 'Package Paid' },
+  { value: 'SoilTestCompleted', label: 'Soil Test Completed' },
   { value: 'ArchitectureApproved', label: 'Architecture Approved' },
+  { value: 'PrincipalArchitectReviewPending', label: 'Principal Architect Review Pending' },
   { value: 'FinalApproved', label: 'Final Approved' },
   { value: 'Delivered', label: 'Delivered' },
   { value: 'Rejected', label: 'Rejected' },
@@ -35,16 +40,22 @@ export const RequestsListPage: React.FC = () => {
 
   const isTransferOfficer   = staffUser?.roleName === 'Transfer Officer';
   const isFinanceOfficer    = staffUser?.roleName === 'Finance Officer';
-  const isTownPlanningOfficer = staffUser?.roleName === 'Town Planner';
-  const isRestrictedRole    = isTransferOfficer || isFinanceOfficer || isTownPlanningOfficer;
+  const isAdCoordinator     = staffUser?.roleName === 'AD Coordinator';
+  const isBuildingControlOfficer = staffUser?.roleName === 'Building Control Officer';
+  const isThreeDUser = staffUser?.roleName === '3D Engineer' || staffUser?.roleName === '3D Operator';
+  const isRestrictedRole    = isTransferOfficer || isFinanceOfficer || isAdCoordinator || isBuildingControlOfficer || isThreeDUser;
 
   // Statuses each restricted role needs to action
   const roleStatusFilter: string[] | undefined = isTransferOfficer
-    ? ['Initiated', 'FinanceApproved']
+    ? ['DocumentsVerification', 'FinanceApproved']
     : isFinanceOfficer
-    ? ['Initiated', 'TransferApproved']
-    : isTownPlanningOfficer
+    ? ['DocumentsVerification', 'TransferApproved']
+    : isAdCoordinator
     ? ['BothBranchesCleared']
+    : isBuildingControlOfficer
+    ? ['AdCoordApproved', 'PackagePaid', 'PrincipalArchitectApproved']
+    : isThreeDUser
+    ? ['ArchitectureApproved']
     : undefined;
 
   const [statusFilter, setStatusFilter] = useState('');
@@ -123,8 +134,7 @@ export const RequestsListPage: React.FC = () => {
     console.error('Failed to parse permissions:', err);
   }
 
-  // Initiate is a Reception Officer action (matches backend ReceptionOfficer policy)
-  const canInitiateRequest = staffUser?.roleName === 'Reception Officer';
+  const canInitiateRequest = false;
 
   return (
     <div className="space-y-6">
@@ -135,7 +145,7 @@ export const RequestsListPage: React.FC = () => {
           </h1>
           <p className="text-gray-500 text-sm mt-1">
             {isRestrictedRole
-              ? `Showing initiated requests pending your action`
+              ? `Showing requests pending your action`
               : `${totalCount} total requests in system`}
           </p>
         </div>
@@ -209,7 +219,7 @@ export const RequestsListPage: React.FC = () => {
                   </td>
                   <td className="py-3 text-gray-600">{req.fileNo}</td>
                   <td className="py-3">
-                    <StatusBadge status={req.status} />
+                    <StatusBadge status={req.status} activeStepNames={req.activeWorkflowStepNames} />
                   </td>
                   <td className="py-3 text-gray-500">
                     {format(new Date(req.submittedAt), 'dd MMM yyyy')}

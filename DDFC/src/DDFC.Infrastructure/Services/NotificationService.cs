@@ -8,8 +8,15 @@ namespace DDFC.Infrastructure.Services;
 public class NotificationService : INotificationService
 {
     private readonly DDFCDbContext _db;
+    private readonly IEmailService _email;
+    private readonly ISmsService   _sms;
 
-    public NotificationService(DDFCDbContext db) => _db = db;
+    public NotificationService(DDFCDbContext db, IEmailService email, ISmsService sms)
+    {
+        _db    = db;
+        _email = email;
+        _sms   = sms;
+    }
 
     public async Task SendToCustomerAsync(Guid customerId, Guid? requestId, string title,
         string body, NotificationChannel channel = NotificationChannel.InApp, bool requiresResponse = false)
@@ -30,9 +37,9 @@ public class NotificationService : INotificationService
 
         // Stub: wire real SMS / Email providers here
         if (channel == NotificationChannel.SMS)
-            await SendSmsStubAsync(customerId, body);
+            await SendSmsAsync(customerId, body);
         else if (channel == NotificationChannel.Email)
-            await SendEmailStubAsync(customerId, title, body);
+            await SendEmailAsync(customerId, title, body);
     }
 
     public async Task<bool> MarkReadAsync(Guid notificationId, Guid customerId)
@@ -56,10 +63,20 @@ public class NotificationService : INotificationService
         return true;
     }
 
-    // ── Stubs (replace with real providers) ───────────────────────────────────
-    private Task SendSmsStubAsync(Guid customerId, string body) =>
-        Task.CompletedTask; // TODO: integrate SMS gateway
+    // ── Providers ─────────────────────────────────────────────────────────────
 
-    private Task SendEmailStubAsync(Guid customerId, string subject, string body) =>
-        Task.CompletedTask; // TODO: integrate SMTP / SendGrid
+    private async Task SendEmailAsync(Guid customerId, string subject, string body)
+    {
+        var customer = await _db.Customers.FindAsync(customerId);
+        if (customer?.Email is null) return;
+        var html = $"<p>{System.Net.WebUtility.HtmlEncode(body)}</p>";
+        await _email.SendAsync(customer.Email, subject, html);
+    }
+
+    private async Task SendSmsAsync(Guid customerId, string body)
+    {
+        var customer = await _db.Customers.FindAsync(customerId);
+        if (customer is null) return;
+        await _sms.SendAsync(customer.PhoneNumber, body);
+    }
 }

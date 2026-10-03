@@ -11,7 +11,7 @@ import { paInitialReview } from '../../../store/slices/requestsSlice';
 import { toast } from 'react-toastify';
 import api from '../../../services/api';
 
-interface User { id: string; fullName: string; email: string; }
+interface User { userId: string; fullName: string; email: string; }
 
 interface Props {
   request: PossessionRequest;
@@ -32,7 +32,9 @@ export const PrincipalArchitectInitialPanel: React.FC<Props> = ({ request, reque
   const [submitting,         setSubmitting]          = useState(false);
   const [showUndertaking,    setShowUndertaking]     = useState(false);
 
-  const isComplete = request.status !== 'PackagePaid';
+  const isComplete = request.status !== 'PackagePaid' && request.status !== 'SoilTestCompleted';
+  // DDFC workflow completes soil test in its own step first; Revised/As-Built have no such step.
+  const needsInlineSoilTest = request.status === 'PackagePaid';
 
   // Load architects from the Architecture department
   useEffect(() => {
@@ -54,11 +56,11 @@ export const PrincipalArchitectInitialPanel: React.FC<Props> = ({ request, reque
         id: requestId,
         data: {
           assignedArchitectId,
-          soilTestFileUrl:     soilTestFileUrl  || undefined,
-          soilTestDate:        soilTestDate     || undefined,
-          labName:             labName.trim()   || undefined,
-          soilBearingCapacity: bearingCapacity.trim() || undefined,
-          resultSummary:       resultSummary.trim()   || undefined,
+          soilTestFileUrl:     needsInlineSoilTest ? (soilTestFileUrl  || undefined) : undefined,
+          soilTestDate:        needsInlineSoilTest ? (soilTestDate     || undefined) : undefined,
+          labName:             needsInlineSoilTest ? (labName.trim()   || undefined) : undefined,
+          soilBearingCapacity: needsInlineSoilTest ? (bearingCapacity.trim() || undefined) : undefined,
+          resultSummary:       needsInlineSoilTest ? (resultSummary.trim()   || undefined) : undefined,
           notes:               notes.trim()     || undefined,
         },
       })).unwrap();
@@ -90,8 +92,9 @@ export const PrincipalArchitectInitialPanel: React.FC<Props> = ({ request, reque
         <div className="p-3 bg-violet-50 border border-violet-200 rounded-lg text-sm text-violet-800 flex items-start gap-2">
           <UserCheck size={16} className="mt-0.5 shrink-0" />
           <span>
-            Review the request, optionally upload the soil test report, then assign an architect
-            to advance the request to the Architecture design step.
+            {needsInlineSoilTest
+              ? 'Review the request, optionally upload the soil test report, then assign an architect to advance the request to the Architecture design step.'
+              : 'Review the request, then assign an architect to advance the request to the Architecture design step.'}
           </span>
         </div>
 
@@ -127,49 +130,51 @@ export const PrincipalArchitectInitialPanel: React.FC<Props> = ({ request, reque
                   onChange={(e) => setAssignedArchitectId(e.target.value)}
                   options={[
                     { value: '', label: '— Select architect —' },
-                    ...architects.map((a) => ({ value: a.id, label: a.fullName })),
+                    ...architects.map((a) => ({ value: a.userId, label: a.fullName })),
                   ]}
                 />
               )}
             </div>
 
-            {/* Soil test (optional) */}
-            <div>
-              <h4 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-1.5">
-                <UploadCloud size={14} />
-                Soil Test Report <span className="text-xs text-gray-400 font-normal">(optional)</span>
-              </h4>
+            {/* Soil test (optional; Revised/As-Built only — DDFC has a dedicated Soil Test step) */}
+            {needsInlineSoilTest && (
+              <div>
+                <h4 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-1.5">
+                  <UploadCloud size={14} />
+                  Soil Test Report <span className="text-xs text-gray-400 font-normal">(optional)</span>
+                </h4>
 
-              {request.soilTestReport ? (
-                <div className="flex items-center gap-2 text-xs text-green-700 bg-green-50 rounded p-2">
-                  <FileCheck size={13} />
-                  Soil test already uploaded.{' '}
-                  <a href={request.soilTestReport.reportUrl} target="_blank" rel="noopener noreferrer"
-                     className="underline">View</a>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  <FileUploadButton
-                    label="Soil Test Report (PDF)"
-                    accept=".pdf,.jpg,.jpeg,.png"
-                    value={soilTestFileUrl}
-                    onUploaded={setSoilTestFileUrl}
-                  />
-                  {soilTestFileUrl && (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <Input label="Test Date" type="date" value={soilTestDate}
-                        onChange={(e) => setSoilTestDate(e.target.value)} />
-                      <Input label="Lab Name" placeholder="Name of testing lab"
-                        value={labName} onChange={(e) => setLabName(e.target.value)} />
-                      <Input label="Soil Bearing Capacity (kN/m²)" placeholder="e.g. 150"
-                        value={bearingCapacity} onChange={(e) => setBearingCapacity(e.target.value)} />
-                      <Input label="Result Summary" placeholder="e.g. Suitable for construction"
-                        value={resultSummary} onChange={(e) => setResultSummary(e.target.value)} />
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
+                {request.soilTestReport ? (
+                  <div className="flex items-center gap-2 text-xs text-green-700 bg-green-50 rounded p-2">
+                    <FileCheck size={13} />
+                    Soil test already uploaded.{' '}
+                    <a href={request.soilTestReport.reportUrl} target="_blank" rel="noopener noreferrer"
+                       className="underline">View</a>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <FileUploadButton
+                      label="Soil Test Report (PDF)"
+                      accept=".pdf,.jpg,.jpeg,.png"
+                      value={soilTestFileUrl}
+                      onUploaded={setSoilTestFileUrl}
+                    />
+                    {soilTestFileUrl && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <Input label="Test Date" type="date" value={soilTestDate}
+                          onChange={(e) => setSoilTestDate(e.target.value)} />
+                        <Input label="Lab Name" placeholder="Name of testing lab"
+                          value={labName} onChange={(e) => setLabName(e.target.value)} />
+                        <Input label="Soil Bearing Capacity (kN/m²)" placeholder="e.g. 150"
+                          value={bearingCapacity} onChange={(e) => setBearingCapacity(e.target.value)} />
+                        <Input label="Result Summary" placeholder="e.g. Suitable for construction"
+                          value={resultSummary} onChange={(e) => setResultSummary(e.target.value)} />
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
 
             <Input label="Notes (optional)" placeholder="Any remarks for the architect…"
               value={notes} onChange={(e) => setNotes(e.target.value)} />

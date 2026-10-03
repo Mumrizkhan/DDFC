@@ -5,5 +5,7 @@ public enum PaymentStatus
     Pending,
     Paid,
     Overdue,
-    Cancelled
+    Cancelled,
+    /// <summary>Challan uploaded by Reception; awaiting Possession Admin approval.</summary>
+    PendingApproval
 }

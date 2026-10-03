@@ -3,20 +3,24 @@ using DDFC.Application.Interfaces;
 namespace DDFC.Infrastructure.Services;
 
 /// <summary>
-/// In-memory OTP service. In production, integrate with Twilio SMS.
+/// In-memory OTP service. Configure Twilio settings to enable SMS delivery.
 /// </summary>
 public class OtpService : IOtpService
 {
     private static readonly Dictionary<string, (string Otp, DateTime Expiry)> _store = new();
     private static readonly Random _rng = new();
 
-    public Task<string> GenerateOtpAsync(string cnic)
+    private readonly ISmsService _sms;
+
+    public OtpService(ISmsService sms) => _sms = sms;
+
+    public async Task<string> GenerateOtpAsync(string cnic)
     {
         var otp = _rng.Next(100000, 999999).ToString();
         _store[cnic] = (otp, DateTime.UtcNow.AddMinutes(10));
-        // TODO: send via Twilio
         Console.WriteLine($"[OTP] {cnic} → {otp}");
-        return Task.FromResult(otp);
+        await _sms.SendAsync(cnic, $"Your DDFC OTP is: {otp}. Valid for 10 minutes.");
+        return otp;
     }
 
     public Task<bool> ValidateOtpAsync(string cnic, string otp)

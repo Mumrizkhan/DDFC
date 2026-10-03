@@ -15,15 +15,17 @@ const ALL_PERMISSIONS = [
   'CanCreateRequest',
   'CanApproveTransfer',
   'CanApproveFinance',
+  'CanApproveAdCoord',
   'CanIssuePossession',
   'CanSelectPackage',
   'CanConfirmPayment',
   'CanUploadPlan',
   'CanApprovePlan',
+  'CanComplete3D',
+  'CanAssign3DOperator',
   'CanCompleteStructure',
   'CanCompleteMEP',
   'CanApprovePrincipal',
-  'CanSubmitTownPlanning',
   'CanSubmitBuildingControl',
   'CanFinalApprove',
   'CanViewAllRequests',
@@ -40,59 +42,69 @@ const ALL_PERMISSIONS = [
 
 const PROTECTED_ROLES = ['Admin', 'Manager', 'Employee'];
 
+const normalizePermissions = (value?: Role['permissions']): Record<string, boolean> => {
+  if (!value) return {};
+
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed)) {
+        return Object.fromEntries(parsed.map((permission) => [permission, true]));
+      }
+      if (parsed && typeof parsed === 'object') {
+        return parsed as Record<string, boolean>;
+      }
+      return {};
+    } catch {
+      return {};
+    }
+  }
+
+  if (Array.isArray(value)) {
+    return Object.fromEntries(value.map((permission) => [permission, true]));
+  }
+
+  return value;
+};
+
 export const RolesPermissionsPage: React.FC = () => {
   const dispatch = useAppDispatch();
   const { roles, loading, actionLoading } = useAppSelector((s) => s.admin);
   const [selectedRole, setSelectedRole] = useState<Role | null>(null);
-  const [permissions, setPermissions] = useState<Record<string, boolean> | string | string[]>({});
+  const [permissions, setPermissions] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     dispatch(fetchRoles());
   }, [dispatch]);
 
-  useEffect(() => {
-    if (roles.length && !selectedRole) {
-      setSelectedRole(roles[0]);
-        setPermissions(roles[0].permissions ?? {});
-    }
-  }, [roles]);
+  const activeRole = selectedRole ?? roles[0] ?? null;
+  const activePermissions = activeRole && !selectedRole
+    ? normalizePermissions(activeRole.permissions)
+    : permissions;
 
   const handleSelectRole = (role: Role) => {
     setSelectedRole(role);
-      setPermissions(role.permissions ?? {});
+    setPermissions(normalizePermissions(role.permissions));
   };
 
   const togglePermission = (perm: string) => {
-    if (PROTECTED_ROLES.includes(selectedRole?.roleName ?? '')) return;
-    setPermissions((prev) => {
-      let perms = prev;
-      if (typeof perms === 'string') {
-        perms = JSON.parse(perms);
-      }
-      if (Array.isArray(perms)) {
-        // Convert to object for toggling
-        perms = Object.fromEntries(perms.map((p) => [p, true]));
-      }
-      return { ...perms, [perm]: !perms[perm] };
-    });
+    if (PROTECTED_ROLES.includes(activeRole?.roleName ?? '')) return;
+    setPermissions((prev) => ({
+      ...prev,
+      [perm]: !prev[perm],
+    }));
   };
 
   const handleSave = async () => {
-    if (!selectedRole) return;
-    let perms = permissions;
-    if (typeof perms === 'string') {
-      perms = JSON.parse(perms);
-    }
-    if (Array.isArray(perms)) {
-      perms = Object.fromEntries(perms.map((p) => [p, true]));
-    }
-    const enabledPerms = Object.entries(perms)
-      .filter(([_, v]) => v)
-      .map(([k]) => k);
+    const targetRole = activeRole;
+    if (!targetRole) return;
+    const enabledPerms = Object.entries(activePermissions)
+      .filter(([, value]) => value)
+      .map(([key]) => key);
     await dispatch(
-      updateRolePermissions({ roleId: selectedRole.roleId, permissions: JSON.stringify(enabledPerms) })
+      updateRolePermissions({ roleId: targetRole.roleId, permissions: JSON.stringify(enabledPerms) })
     ).unwrap();
-    toast.success(`Permissions updated for ${selectedRole.roleName}`);
+    toast.success(`Permissions updated for ${targetRole.roleName}`);
   };
 
   if (loading) return <PageLoader />;
@@ -154,14 +166,14 @@ export const RolesPermissionsPage: React.FC = () => {
                   <label
                     key={perm}
                     className={`flex items-center gap-3 p-3 rounded-lg border transition-colors cursor-pointer
-                      ${permissions[perm] ? 'border-blue-300 bg-blue-50' : 'border-gray-200 bg-white'}
-                      ${PROTECTED_ROLES.includes(selectedRole.roleName) ? 'opacity-60 cursor-not-allowed' : ''}`}
+                      ${activePermissions[perm] ? 'border-blue-300 bg-blue-50' : 'border-gray-200 bg-white'}
+                      ${PROTECTED_ROLES.includes(activeRole?.roleName ?? '') ? 'opacity-60 cursor-not-allowed' : ''}`}
                   >
                     <input
                       type="checkbox"
-                      checked={!!permissions[perm]}
+                      checked={!!activePermissions[perm]}
                       onChange={() => togglePermission(perm)}
-                      disabled={PROTECTED_ROLES.includes(selectedRole.roleName)}
+                      disabled={PROTECTED_ROLES.includes(activeRole?.roleName ?? '')}
                       className="rounded text-blue-600"
                     />
                     <span className="text-sm text-gray-700">{perm}</span>

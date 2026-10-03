@@ -1,4 +1,4 @@
-using DDFC.Domain.Entities;
+﻿using DDFC.Domain.Entities;
 using DDFC.Domain.Enums;
 using DDFC.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Identity;
@@ -14,13 +14,13 @@ public static class DDFCDataSeeder
         UserManager<User>    userManager,
         RoleManager<Role>    roleManager)
     {
-        // ══════════════════════════════════════════════════════════════════════
-        // ── STEP 5/6: Plots & Customers — always run (own guards inside) ──────
-        // ══════════════════════════════════════════════════════════════════════
+        // ??????????????????????????????????????????????????????????????????????
+        // ?? STEP 5/6: Plots & Customers ï¿½ always run (own guards inside) ??????
+        // ??????????????????????????????????????????????????????????????????????
         await SeedPlotsAsync(db);
         await SeedCustomersAsync(db);
 
-        // ── Seed new workflow packages independently (run even after initial seed) ──
+        // ?? Seed new workflow packages independently (run even after initial seed) ??
         if (!db.Packages.Any(p => p.PackageCategory == PackageCategory.RevisedPlan))
         {
             SeedRevisedPlanPackages(db);
@@ -32,17 +32,23 @@ public static class DDFCDataSeeder
             await db.SaveChangesAsync();
         }
 
-        // Guard – skip roles/users/packages if already seeded
-        if (await roleManager.Roles.AnyAsync()) return;
+        // Guard ï¿½ skip roles/users/packages if already seeded
+        if (await roleManager.Roles.AnyAsync())
+        {
+            await EnsureMepUsersAsync(db, userManager, roleManager);
+            return;
+        }
 
-        // ══════════════════════════════════════════════════════════════════════
-        // ── STEP 1: Seed Departments ──────────────────────────────────────────
-        // ══════════════════════════════════════════════════════════════════════
+        // ??????????????????????????????????????????????????????????????????????
+        // ?? STEP 1: Seed Departments ??????????????????????????????????????????
+        // ??????????????????????????????????????????????????????????????????????
         var frontDesk   = new Department { DepartmentName = "Front Desk",         DepartmentCode = "FD" };
         var transfer    = new Department { DepartmentName = "Transfer Branch",     DepartmentCode = "TB" };
         var finance     = new Department { DepartmentName = "Finance Branch",      DepartmentCode = "FB" };
+        var adCoordDept = new Department { DepartmentName = "AD Coordinator",      DepartmentCode = "ADC" };
         var buildCtrl   = new Department { DepartmentName = "Building Control",    DepartmentCode = "BC" };
         var archDept    = new Department { DepartmentName = "Architecture Dept",   DepartmentCode = "AD" };
+        var threeDDept  = new Department { DepartmentName = "3D Dept",             DepartmentCode = "3D" };
         var structDept  = new Department { DepartmentName = "Structure Dept",      DepartmentCode = "SD" };
         var mepDept     = new Department { DepartmentName = "MEP Dept",            DepartmentCode = "MD" };
         var principalOfc= new Department { DepartmentName = "Principal Office",    DepartmentCode = "PO" };
@@ -50,13 +56,13 @@ public static class DDFCDataSeeder
         var adminDept   = new Department { DepartmentName = "Administration",      DepartmentCode = "AS" };
         var techSupDept = new Department { DepartmentName = "Technical Support",   DepartmentCode = "TS" };
 
-        db.Departments.AddRange(frontDesk, transfer, finance, buildCtrl,
-            archDept, structDept, mepDept, principalOfc, dhaDesign, adminDept, techSupDept);
+        db.Departments.AddRange(frontDesk, transfer, finance, adCoordDept, buildCtrl,
+            archDept, threeDDept, structDept, mepDept, principalOfc, dhaDesign, adminDept, techSupDept);
         await db.SaveChangesAsync();
 
-        // ══════════════════════════════════════════════════════════════════════
-        // ── STEP 2: Seed Roles with Role Claims ───────────────────────────────
-        // ══════════════════════════════════════════════════════════════════════
+        // ??????????????????????????????????????????????????????????????????????
+        // ?? STEP 2: Seed Roles with Role Claims ???????????????????????????????
+        // ??????????????????????????????????????????????????????????????????????
         
         // Admin Role
         var adminRole = new Role("Admin") { IsBuiltIn = true };
@@ -84,6 +90,12 @@ public static class DDFCDataSeeder
         await AddRoleClaims(roleManager, financeRole,
             "CanApproveFinance", "CanConfirmPayment", "CanViewAllRequests");
 
+        // AD Coordinator Role (Assistant Director Coordinator — reviews after Finance, before DDFC Admin signs)
+        var adCoordRole = new Role("AD Coordinator") { IsBuiltIn = true };
+        await roleManager.CreateAsync(adCoordRole);
+        await AddRoleClaims(roleManager, adCoordRole,
+            "CanApproveAdCoord", "CanViewAllRequests");
+
         // Building Control Officer Role (also handles soil tests and possession cert issuance)
         var buildingControlRole = new Role("Building Control Officer") { IsBuiltIn = true };
         await roleManager.CreateAsync(buildingControlRole);
@@ -95,6 +107,18 @@ public static class DDFCDataSeeder
         await roleManager.CreateAsync(architectRole);
         await AddRoleClaims(roleManager, architectRole,
             "CanUploadPlan", "CanViewAllRequests");
+
+        // 3D Engineer Role
+        var threeDEngineerRole = new Role("3D Engineer") { IsBuiltIn = true };
+        await roleManager.CreateAsync(threeDEngineerRole);
+        await AddRoleClaims(roleManager, threeDEngineerRole,
+            "CanComplete3D", "CanViewAllRequests");
+
+        // 3D Operator Role
+        var threeDOperatorRole = new Role("3D Operator") { IsBuiltIn = true };
+        await roleManager.CreateAsync(threeDOperatorRole);
+        await AddRoleClaims(roleManager, threeDOperatorRole,
+            "CanAssign3DOperator", "CanViewAllRequests");
 
         // Structure Engineer Role
         var structureRole = new Role("Structure Engineer") { IsBuiltIn = true };
@@ -138,9 +162,9 @@ public static class DDFCDataSeeder
         await AddRoleClaims(roleManager, ddfcAdminRole,
             "CanSignPossessionLetter", "CanSelectPackage", "CanConfirmPayment", "CanViewAllRequests");
 
-        // ══════════════════════════════════════════════════════════════════════
-        // ── STEP 3: Seed Users with User Claims ───────────────────────────────
-        // ══════════════════════════════════════════════════════════════════════
+        // ??????????????????????????????????????????????????????????????????????
+        // ?? STEP 3: Seed Users with User Claims ???????????????????????????????
+        // ??????????????????????????????????????????????????????????????????????
 
         // Admin User
         await CreateUserWithClaims(userManager, 
@@ -239,6 +263,33 @@ public static class DDFCDataSeeder
                 ("canVerifyPayments", "true")
             });
 
+        // AD Coordinators (Assistant Director Coordinator)
+        await CreateUserWithClaims(userManager,
+            fullName: "Waqas Anjum",
+            email: "waqas.anjum@ddfc.com.pk",
+            password: "AdCoord@2026!",
+            departmentId: adCoordDept.Id,
+            roleName: "AD Coordinator",
+            claims: new[]
+            {
+                ("userType", "staff"),
+                ("departmentCode", adCoordDept.DepartmentCode),
+                ("approvalAuthority", "AdCoord")
+            });
+
+        await CreateUserWithClaims(userManager,
+            fullName: "Rabia Sultan",
+            email: "rabia.sultan@ddfc.com.pk",
+            password: "AdCoord@2026!",
+            departmentId: adCoordDept.Id,
+            roleName: "AD Coordinator",
+            claims: new[]
+            {
+                ("userType", "staff"),
+                ("departmentCode", adCoordDept.DepartmentCode),
+                ("approvalAuthority", "AdCoord")
+            });
+
         // Building Control Officers (now also handle possession cert issuance)
         await CreateUserWithClaims(userManager,
             fullName: "Kamran Ali",
@@ -335,6 +386,62 @@ public static class DDFCDataSeeder
                 ("yearsOfExperience", "8")
             });
 
+        // 3D Engineers
+        await CreateUserWithClaims(userManager,
+            fullName: "Areeba Nadeem",
+            email: "areeba.nadeem@ddfc.com.pk",
+            password: "ThreeD@2026!",
+            departmentId: threeDDept.Id,
+            roleName: "3D Engineer",
+            claims: new[]
+            {
+                ("userType", "staff"),
+                ("departmentCode", threeDDept.DepartmentCode),
+                ("engineeringLicense", "3D-1001"),
+                ("specialization", "Visualization")
+            });
+
+        await CreateUserWithClaims(userManager,
+            fullName: "Hamza Imran",
+            email: "hamza.imran@ddfc.com.pk",
+            password: "ThreeD@2026!",
+            departmentId: threeDDept.Id,
+            roleName: "3D Engineer",
+            claims: new[]
+            {
+                ("userType", "staff"),
+                ("departmentCode", threeDDept.DepartmentCode),
+                ("engineeringLicense", "3D-1002"),
+                ("specialization", "Rendering")
+            });
+
+        // 3D Operators
+        await CreateUserWithClaims(userManager,
+            fullName: "Sana Khurram",
+            email: "sana.khurram@ddfc.com.pk",
+            password: "ThreeD@2026!",
+            departmentId: threeDDept.Id,
+            roleName: "3D Operator",
+            claims: new[]
+            {
+                ("userType", "staff"),
+                ("departmentCode", threeDDept.DepartmentCode),
+                ("cadOperator", "true")
+            });
+
+        await CreateUserWithClaims(userManager,
+            fullName: "Musa Ali",
+            email: "musa.ali@ddfc.com.pk",
+            password: "ThreeD@2026!",
+            departmentId: threeDDept.Id,
+            roleName: "3D Operator",
+            claims: new[]
+            {
+                ("userType", "staff"),
+                ("departmentCode", threeDDept.DepartmentCode),
+                ("cadOperator", "true")
+            });
+
         // Structure Engineers
         await CreateUserWithClaims(userManager,
             fullName: "Fahad Mirza",
@@ -365,47 +472,7 @@ public static class DDFCDataSeeder
             });
 
         // MEP Engineers
-        await CreateUserWithClaims(userManager,
-            fullName: "Tariq Mahmood",
-            email: "tariq.mahmood@ddfc.com.pk",
-            password: "MEP@2026!",
-            departmentId: mepDept.Id,
-            roleName: "MEP Engineer",
-            claims: new[]
-            {
-                ("userType", "staff"),
-                ("departmentCode", mepDept.DepartmentCode),
-                ("engineeringLicense", "PEC-12347"),
-                ("mepSpecialty", "HVAC")
-            });
-
-        await CreateUserWithClaims(userManager,
-            fullName: "Nadia Akram",
-            email: "nadia.akram@ddfc.com.pk",
-            password: "MEP@2026!",
-            departmentId: mepDept.Id,
-            roleName: "MEP Engineer",
-            claims: new[]
-            {
-                ("userType", "staff"),
-                ("departmentCode", mepDept.DepartmentCode),
-                ("engineeringLicense", "PEC-12348"),
-                ("mepSpecialty", "Electrical")
-            });
-
-        await CreateUserWithClaims(userManager,
-            fullName: "Asif Raza",
-            email: "asif.raza@ddfc.com.pk",
-            password: "MEP@2026!",
-            departmentId: mepDept.Id,
-            roleName: "MEP Engineer",
-            claims: new[]
-            {
-                ("userType", "staff"),
-                ("departmentCode", mepDept.DepartmentCode),
-                ("engineeringLicense", "PEC-12349"),
-                ("mepSpecialty", "Plumbing")
-            });
+        await EnsureMepUsersAsync(db, userManager, roleManager);
 
         // Principal Architect
         await CreateUserWithClaims(userManager,
@@ -492,10 +559,10 @@ public static class DDFCDataSeeder
                 ("canSignPossessionLetter", "true")
             });
 
-        // ══════════════════════════════════════════════════════════════════════
-        // ── STEP 4: Seed Packages (from DHA DDFC official pamphlet) ─────────────
+        // ??????????????????????????????????????????????????????????????????????
+        // ?? STEP 4: Seed Packages (from DHA DDFC official pamphlet) ?????????????
         // Two design tracks per size/tier: InclusiveDesign and ExclusiveDesign
-        // ══════════════════════════════════════════════════════════════════════
+        // ??????????????????????????????????????????????????????????????????????
         SeedHouseDesignPackages(db);
         SeedInteriorDesignPackages(db);
         SeedSupervisionPackages(db);
@@ -503,7 +570,7 @@ public static class DDFCDataSeeder
         await db.SaveChangesAsync();
     }
 
-    // ── Revised Plan packages (flat-fee per plot size) ────────────────────────
+    // ?? Revised Plan packages (flat-fee per plot size) ????????????????????????
     private static void SeedRevisedPlanPackages(DDFCDbContext db)
     {
         void Add(PlotSize size, DesignType type, decimal fee)
@@ -521,15 +588,15 @@ public static class DDFCDataSeeder
             db.Packages.Add(pkg);
         }
 
-        Add(PlotSize.FiveMarla,  DesignType.InclusiveDesign,  20_000m);
-        Add(PlotSize.FiveMarla,  DesignType.ExclusiveDesign, 20_000m);
-        Add(PlotSize.TenMarla,   DesignType.InclusiveDesign,  30_000m);
-        Add(PlotSize.TenMarla,   DesignType.ExclusiveDesign, 30_000m);
-        Add(PlotSize.OneKanal,   DesignType.InclusiveDesign,  35_000m);
-        Add(PlotSize.OneKanal,   DesignType.ExclusiveDesign, 35_000m);
+        Add(PlotSize.FiveMarla,  DesignType.ExclusiveDesign,  20_000m);
+        Add(PlotSize.FiveMarla,  DesignType.InclusiveDesign, 20_000m);
+        Add(PlotSize.TenMarla,   DesignType.ExclusiveDesign,  30_000m);
+        Add(PlotSize.TenMarla,   DesignType.InclusiveDesign, 30_000m);
+        Add(PlotSize.OneKanal,   DesignType.ExclusiveDesign,  35_000m);
+        Add(PlotSize.OneKanal,   DesignType.InclusiveDesign, 35_000m);
     }
 
-    // ── As-Built Plan packages (flat-fee per plot size) ───────────────────────
+    // ?? As-Built Plan packages (flat-fee per plot size) ???????????????????????
     private static void SeedAsBuiltPlanPackages(DDFCDbContext db)
     {
         void Add(PlotSize size, DesignType type, decimal fee)
@@ -547,19 +614,19 @@ public static class DDFCDataSeeder
             db.Packages.Add(pkg);
         }
 
-        Add(PlotSize.FiveMarla,  DesignType.InclusiveDesign,  15_000m);
-        Add(PlotSize.FiveMarla,  DesignType.ExclusiveDesign, 15_000m);
-        Add(PlotSize.TenMarla,   DesignType.InclusiveDesign,  25_000m);
-        Add(PlotSize.TenMarla,   DesignType.ExclusiveDesign, 25_000m);
-        Add(PlotSize.OneKanal,   DesignType.InclusiveDesign,  30_000m);
-        Add(PlotSize.OneKanal,   DesignType.ExclusiveDesign, 30_000m);
+        Add(PlotSize.FiveMarla,  DesignType.ExclusiveDesign,  15_000m);
+        Add(PlotSize.FiveMarla,  DesignType.InclusiveDesign, 15_000m);
+        Add(PlotSize.TenMarla,   DesignType.ExclusiveDesign,  25_000m);
+        Add(PlotSize.TenMarla,   DesignType.InclusiveDesign, 25_000m);
+        Add(PlotSize.OneKanal,   DesignType.ExclusiveDesign,  30_000m);
+        Add(PlotSize.OneKanal,   DesignType.InclusiveDesign, 30_000m);
     }
 
-    // ── House Design packages (exact pricing from DDFC pamphlet) ─────────────
+    // ?? House Design packages (exact pricing from DDFC pamphlet) ?????????????
 
     private static void SeedHouseDesignPackages(DDFCDbContext db)
     {
-        // ── RESIDENTIAL: 5 Marla ─────────────────────────────────────────────
+        // ?? RESIDENTIAL: 5 Marla ?????????????????????????????????????????????
         // Residential services (13 rows):
         // Processing Fee | Possession Letter | Site Visit | Soil Test |
         // Architectural Design & Drawing | Structural Design & Drawing |
@@ -567,190 +634,190 @@ public static class DDFCDataSeeder
         // Interior Design | Material Selection by Professional |
         // Walkthrough Animation | Scrutiny/Vetting Fee | Construction NOC Approval Fee
 
-        AddResidentialPackage(db, PlotSize.FiveMarla, PackageTier.Bronze, DesignType.InclusiveDesign,
+        AddResidentialPackage(db, PlotSize.FiveMarla, PackageTier.Bronze, DesignType.ExclusiveDesign,
             processing: 20_000, soilTest: 30_000, arch: 80_000, structural: 40_000, mep: 25_000,
             elevation3D: 15_000, interior: 0, material: 0, walkthrough: 0);
 
-        AddResidentialPackage(db, PlotSize.FiveMarla, PackageTier.Bronze, DesignType.ExclusiveDesign,
+        AddResidentialPackage(db, PlotSize.FiveMarla, PackageTier.Bronze, DesignType.InclusiveDesign,
             processing: 20_000, soilTest: 30_000, arch: 80_000, structural: 40_000, mep: 25_000,
             elevation3D: 120_000, interior: 0, material: 0, walkthrough: 0);
 
-        AddResidentialPackage(db, PlotSize.FiveMarla, PackageTier.Silver, DesignType.InclusiveDesign,
+        AddResidentialPackage(db, PlotSize.FiveMarla, PackageTier.Silver, DesignType.ExclusiveDesign,
             processing: 20_000, soilTest: 30_000, arch: 80_000, structural: 40_000, mep: 25_000,
             elevation3D: 15_000, interior: 105_000, material: 0, walkthrough: 0);
 
-        AddResidentialPackage(db, PlotSize.FiveMarla, PackageTier.Silver, DesignType.ExclusiveDesign,
+        AddResidentialPackage(db, PlotSize.FiveMarla, PackageTier.Silver, DesignType.InclusiveDesign,
             processing: 20_000, soilTest: 30_000, arch: 80_000, structural: 40_000, mep: 25_000,
             elevation3D: 120_000, interior: 45_000, material: 0, walkthrough: 0);
 
-        AddResidentialPackage(db, PlotSize.FiveMarla, PackageTier.Gold, DesignType.InclusiveDesign,
+        AddResidentialPackage(db, PlotSize.FiveMarla, PackageTier.Gold, DesignType.ExclusiveDesign,
             processing: 20_000, soilTest: 0 /*Free*/, arch: 80_000, structural: 40_000, mep: 25_000,
             elevation3D: 15_000, interior: 105_000, material: 0 /*Free*/, walkthrough: 75_000);
 
-        AddResidentialPackage(db, PlotSize.FiveMarla, PackageTier.Gold, DesignType.ExclusiveDesign,
+        AddResidentialPackage(db, PlotSize.FiveMarla, PackageTier.Gold, DesignType.InclusiveDesign,
             processing: 20_000, soilTest: 0, arch: 80_000, structural: 40_000, mep: 25_000,
             elevation3D: 120_000, interior: 105_000, material: 0, walkthrough: 75_000);
 
-        // ── RESIDENTIAL: 10 Marla ────────────────────────────────────────────
-        AddResidentialPackage(db, PlotSize.TenMarla, PackageTier.Bronze, DesignType.InclusiveDesign,
+        // ?? RESIDENTIAL: 10 Marla ????????????????????????????????????????????
+        AddResidentialPackage(db, PlotSize.TenMarla, PackageTier.Bronze, DesignType.ExclusiveDesign,
             processing: 30_000, soilTest: 40_000, arch: 125_000, structural: 60_000, mep: 30_000,
             elevation3D: 20_000, interior: 0, material: 0, walkthrough: 0);
 
-        AddResidentialPackage(db, PlotSize.TenMarla, PackageTier.Bronze, DesignType.ExclusiveDesign,
+        AddResidentialPackage(db, PlotSize.TenMarla, PackageTier.Bronze, DesignType.InclusiveDesign,
             processing: 30_000, soilTest: 40_000, arch: 125_000, structural: 60_000, mep: 30_000,
             elevation3D: 170_000, interior: 0, material: 0, walkthrough: 0);
 
-        AddResidentialPackage(db, PlotSize.TenMarla, PackageTier.Silver, DesignType.InclusiveDesign,
+        AddResidentialPackage(db, PlotSize.TenMarla, PackageTier.Silver, DesignType.ExclusiveDesign,
             processing: 30_000, soilTest: 40_000, arch: 125_000, structural: 60_000, mep: 30_000,
             elevation3D: 20_000, interior: 120_000, material: 0, walkthrough: 0);
 
-        AddResidentialPackage(db, PlotSize.TenMarla, PackageTier.Silver, DesignType.ExclusiveDesign,
+        AddResidentialPackage(db, PlotSize.TenMarla, PackageTier.Silver, DesignType.InclusiveDesign,
             processing: 30_000, soilTest: 40_000, arch: 125_000, structural: 60_000, mep: 30_000,
             elevation3D: 170_000, interior: 46_000, material: 0, walkthrough: 0);
 
-        AddResidentialPackage(db, PlotSize.TenMarla, PackageTier.Gold, DesignType.InclusiveDesign,
+        AddResidentialPackage(db, PlotSize.TenMarla, PackageTier.Gold, DesignType.ExclusiveDesign,
             processing: 30_000, soilTest: 0, arch: 125_000, structural: 60_000, mep: 30_000,
             elevation3D: 20_000, interior: 120_000, material: 0, walkthrough: 100_000);
 
-        AddResidentialPackage(db, PlotSize.TenMarla, PackageTier.Gold, DesignType.ExclusiveDesign,
+        AddResidentialPackage(db, PlotSize.TenMarla, PackageTier.Gold, DesignType.InclusiveDesign,
             processing: 30_000, soilTest: 0, arch: 125_000, structural: 60_000, mep: 30_000,
             elevation3D: 170_000, interior: 120_000, material: 0, walkthrough: 100_000);
 
-        // ── RESIDENTIAL: 1 Kanal ─────────────────────────────────────────────
-        AddResidentialPackage(db, PlotSize.OneKanal, PackageTier.Bronze, DesignType.InclusiveDesign,
+        // ?? RESIDENTIAL: 1 Kanal ?????????????????????????????????????????????
+        AddResidentialPackage(db, PlotSize.OneKanal, PackageTier.Bronze, DesignType.ExclusiveDesign,
             processing: 50_000, soilTest: 50_000, arch: 200_000, structural: 100_000, mep: 50_000,
             elevation3D: 50_000, interior: 0, material: 0, walkthrough: 0);
 
-        AddResidentialPackage(db, PlotSize.OneKanal, PackageTier.Bronze, DesignType.ExclusiveDesign,
+        AddResidentialPackage(db, PlotSize.OneKanal, PackageTier.Bronze, DesignType.InclusiveDesign,
             processing: 50_000, soilTest: 50_000, arch: 200_000, structural: 100_000, mep: 50_000,
             elevation3D: 300_000, interior: 0, material: 0, walkthrough: 0);
 
-        AddResidentialPackage(db, PlotSize.OneKanal, PackageTier.Silver, DesignType.InclusiveDesign,
+        AddResidentialPackage(db, PlotSize.OneKanal, PackageTier.Silver, DesignType.ExclusiveDesign,
             processing: 50_000, soilTest: 50_000, arch: 200_000, structural: 100_000, mep: 50_000,
             elevation3D: 50_000, interior: 165_000, material: 0, walkthrough: 0);
 
-        AddResidentialPackage(db, PlotSize.OneKanal, PackageTier.Silver, DesignType.ExclusiveDesign,
+        AddResidentialPackage(db, PlotSize.OneKanal, PackageTier.Silver, DesignType.InclusiveDesign,
             processing: 50_000, soilTest: 50_000, arch: 200_000, structural: 100_000, mep: 50_000,
             elevation3D: 300_000, interior: 65_000, material: 0, walkthrough: 0);
 
-        AddResidentialPackage(db, PlotSize.OneKanal, PackageTier.Gold, DesignType.InclusiveDesign,
+        AddResidentialPackage(db, PlotSize.OneKanal, PackageTier.Gold, DesignType.ExclusiveDesign,
             processing: 50_000, soilTest: 0, arch: 200_000, structural: 100_000, mep: 50_000,
             elevation3D: 50_000, interior: 165_000, material: 0, walkthrough: 150_000);
 
-        AddResidentialPackage(db, PlotSize.OneKanal, PackageTier.Gold, DesignType.ExclusiveDesign,
+        AddResidentialPackage(db, PlotSize.OneKanal, PackageTier.Gold, DesignType.InclusiveDesign,
             processing: 50_000, soilTest: 0, arch: 200_000, structural: 100_000, mep: 50_000,
             elevation3D: 300_000, interior: 165_000, material: 0, walkthrough: 150_000);
 
-        // ── RESIDENTIAL: 2 Kanal (40 Marla) ─────────────────────────────────
-        AddResidentialPackage(db, PlotSize.TwoKanal, PackageTier.Bronze, DesignType.InclusiveDesign,
+        // ?? RESIDENTIAL: 2 Kanal (40 Marla) ?????????????????????????????????
+        AddResidentialPackage(db, PlotSize.TwoKanal, PackageTier.Bronze, DesignType.ExclusiveDesign,
             processing: 80_000, soilTest: 80_000, arch: 350_000, structural: 160_000, mep: 80_000,
             elevation3D: 80_000, interior: 0, material: 0, walkthrough: 0);
 
-        AddResidentialPackage(db, PlotSize.TwoKanal, PackageTier.Bronze, DesignType.ExclusiveDesign,
+        AddResidentialPackage(db, PlotSize.TwoKanal, PackageTier.Bronze, DesignType.InclusiveDesign,
             processing: 80_000, soilTest: 80_000, arch: 350_000, structural: 160_000, mep: 80_000,
             elevation3D: 480_000, interior: 0, material: 0, walkthrough: 0);
 
-        AddResidentialPackage(db, PlotSize.TwoKanal, PackageTier.Silver, DesignType.InclusiveDesign,
+        AddResidentialPackage(db, PlotSize.TwoKanal, PackageTier.Silver, DesignType.ExclusiveDesign,
             processing: 80_000, soilTest: 80_000, arch: 350_000, structural: 160_000, mep: 80_000,
             elevation3D: 80_000, interior: 250_000, material: 0, walkthrough: 0);
 
-        AddResidentialPackage(db, PlotSize.TwoKanal, PackageTier.Silver, DesignType.ExclusiveDesign,
+        AddResidentialPackage(db, PlotSize.TwoKanal, PackageTier.Silver, DesignType.InclusiveDesign,
             processing: 80_000, soilTest: 80_000, arch: 350_000, structural: 160_000, mep: 80_000,
             elevation3D: 480_000, interior: 100_000, material: 0, walkthrough: 0);
 
-        AddResidentialPackage(db, PlotSize.TwoKanal, PackageTier.Gold, DesignType.InclusiveDesign,
+        AddResidentialPackage(db, PlotSize.TwoKanal, PackageTier.Gold, DesignType.ExclusiveDesign,
             processing: 80_000, soilTest: 0, arch: 350_000, structural: 160_000, mep: 80_000,
             elevation3D: 80_000, interior: 250_000, material: 0, walkthrough: 250_000);
 
-        AddResidentialPackage(db, PlotSize.TwoKanal, PackageTier.Gold, DesignType.ExclusiveDesign,
+        AddResidentialPackage(db, PlotSize.TwoKanal, PackageTier.Gold, DesignType.InclusiveDesign,
             processing: 80_000, soilTest: 0, arch: 350_000, structural: 160_000, mep: 80_000,
             elevation3D: 480_000, interior: 250_000, material: 0, walkthrough: 250_000);
 
-        // ── COMMERCIAL: 4 Marla ──────────────────────────────────────────────
-        // Commercial services (12 rows — no Material Selection):
+        // ?? COMMERCIAL: 4 Marla ??????????????????????????????????????????????
+        // Commercial services (12 rows ï¿½ no Material Selection):
         // Processing Fee | Possession Letter | Site Visit | Soil Test |
         // Architectural Design & Drawing | Structural Design & Drawing |
         // MEP Design & Drawing | 3D Elevation Design & Renders |
         // Interior Design | Walkthrough Animation |
         // Scrutiny/Vetting Fee | Construction NOC Approval Fee
 
-        AddCommercialPackage(db, PlotSize.FourMarla, PackageTier.Bronze, DesignType.InclusiveDesign,
+        AddCommercialPackage(db, PlotSize.FourMarla, PackageTier.Bronze, DesignType.ExclusiveDesign,
             processing: 50_000, soilTest: 50_000, arch: 300_000, structural: 100_000, mep: 100_000,
             elevation3D: 50_000, interior: 0, walkthrough: 0, landscape: 0);
 
-        AddCommercialPackage(db, PlotSize.FourMarla, PackageTier.Bronze, DesignType.ExclusiveDesign,
+        AddCommercialPackage(db, PlotSize.FourMarla, PackageTier.Bronze, DesignType.InclusiveDesign,
             processing: 50_000, soilTest: 50_000, arch: 300_000, structural: 100_000, mep: 100_000,
             elevation3D: 350_000, interior: 0, walkthrough: 0, landscape: 0);
 
-        AddCommercialPackage(db, PlotSize.FourMarla, PackageTier.Silver, DesignType.InclusiveDesign,
+        AddCommercialPackage(db, PlotSize.FourMarla, PackageTier.Silver, DesignType.ExclusiveDesign,
             processing: 50_000, soilTest: 50_000, arch: 300_000, structural: 100_000, mep: 100_000,
             elevation3D: 50_000, interior: 250_000, walkthrough: 0, landscape: 0);
 
-        AddCommercialPackage(db, PlotSize.FourMarla, PackageTier.Silver, DesignType.ExclusiveDesign,
+        AddCommercialPackage(db, PlotSize.FourMarla, PackageTier.Silver, DesignType.InclusiveDesign,
             processing: 50_000, soilTest: 50_000, arch: 300_000, structural: 100_000, mep: 100_000,
             elevation3D: 350_000, interior: 100_000, walkthrough: 0, landscape: 0);
 
-        AddCommercialPackage(db, PlotSize.FourMarla, PackageTier.Gold, DesignType.InclusiveDesign,
+        AddCommercialPackage(db, PlotSize.FourMarla, PackageTier.Gold, DesignType.ExclusiveDesign,
             processing: 50_000, soilTest: 50_000, arch: 300_000, structural: 100_000, mep: 100_000,
             elevation3D: 50_000, interior: 250_000, walkthrough: 200_000, landscape: 100_000);
 
-        AddCommercialPackage(db, PlotSize.FourMarla, PackageTier.Gold, DesignType.ExclusiveDesign,
+        AddCommercialPackage(db, PlotSize.FourMarla, PackageTier.Gold, DesignType.InclusiveDesign,
             processing: 50_000, soilTest: 50_000, arch: 300_000, structural: 100_000, mep: 100_000,
             elevation3D: 350_000, interior: 250_000, walkthrough: 200_000, landscape: 100_000);
 
-        // ── COMMERCIAL: 8 Marla ──────────────────────────────────────────────
-        AddCommercialPackage(db, PlotSize.EightMarla, PackageTier.Bronze, DesignType.InclusiveDesign,
+        // ?? COMMERCIAL: 8 Marla ??????????????????????????????????????????????
+        AddCommercialPackage(db, PlotSize.EightMarla, PackageTier.Bronze, DesignType.ExclusiveDesign,
             processing: 80_000, soilTest: 100_000, arch: 460_000, structural: 200_000, mep: 180_000,
             elevation3D: 35_000, interior: 0, walkthrough: 0, landscape: 0);
 
-        AddCommercialPackage(db, PlotSize.EightMarla, PackageTier.Bronze, DesignType.ExclusiveDesign,
+        AddCommercialPackage(db, PlotSize.EightMarla, PackageTier.Bronze, DesignType.InclusiveDesign,
             processing: 80_000, soilTest: 100_000, arch: 460_000, structural: 200_000, mep: 180_000,
             elevation3D: 365_000, interior: 0, walkthrough: 0, landscape: 0);
 
-        AddCommercialPackage(db, PlotSize.EightMarla, PackageTier.Silver, DesignType.InclusiveDesign,
+        AddCommercialPackage(db, PlotSize.EightMarla, PackageTier.Silver, DesignType.ExclusiveDesign,
             processing: 80_000, soilTest: 100_000, arch: 460_000, structural: 200_000, mep: 180_000,
             elevation3D: 35_000, interior: 250_000, walkthrough: 0, landscape: 0);
 
-        AddCommercialPackage(db, PlotSize.EightMarla, PackageTier.Silver, DesignType.ExclusiveDesign,
+        AddCommercialPackage(db, PlotSize.EightMarla, PackageTier.Silver, DesignType.InclusiveDesign,
             processing: 80_000, soilTest: 100_000, arch: 460_000, structural: 200_000, mep: 180_000,
             elevation3D: 365_000, interior: 100_000, walkthrough: 0, landscape: 0);
 
-        AddCommercialPackage(db, PlotSize.EightMarla, PackageTier.Gold, DesignType.InclusiveDesign,
+        AddCommercialPackage(db, PlotSize.EightMarla, PackageTier.Gold, DesignType.ExclusiveDesign,
             processing: 80_000, soilTest: 100_000, arch: 460_000, structural: 200_000, mep: 180_000,
             elevation3D: 35_000, interior: 250_000, walkthrough: 250_000, landscape: 125_000);
 
-        AddCommercialPackage(db, PlotSize.EightMarla, PackageTier.Gold, DesignType.ExclusiveDesign,
+        AddCommercialPackage(db, PlotSize.EightMarla, PackageTier.Gold, DesignType.InclusiveDesign,
             processing: 80_000, soilTest: 100_000, arch: 460_000, structural: 200_000, mep: 180_000,
             elevation3D: 365_000, interior: 250_000, walkthrough: 250_000, landscape: 125_000);
 
-        // ── COMMERCIAL: 1 Kanal ──────────────────────────────────────────────
-        // (13 rows — includes Landscape Design)
-        AddCommercialPackage(db, PlotSize.OneKanal, PackageTier.Bronze, DesignType.InclusiveDesign,
+        // ?? COMMERCIAL: 1 Kanal ??????????????????????????????????????????????
+        // (13 rows ï¿½ includes Landscape Design)
+        AddCommercialPackage(db, PlotSize.OneKanal, PackageTier.Bronze, DesignType.ExclusiveDesign,
             processing: 150_000, soilTest: 150_000, arch: 850_000, structural: 350_000, mep: 300_000,
             elevation3D: 40_000, interior: 0, walkthrough: 0, landscape: 0);
 
-        AddCommercialPackage(db, PlotSize.OneKanal, PackageTier.Bronze, DesignType.ExclusiveDesign,
+        AddCommercialPackage(db, PlotSize.OneKanal, PackageTier.Bronze, DesignType.InclusiveDesign,
             processing: 150_000, soilTest: 150_000, arch: 850_000, structural: 350_000, mep: 300_000,
             elevation3D: 625_000, interior: 0, walkthrough: 0, landscape: 0);
 
-        AddCommercialPackage(db, PlotSize.OneKanal, PackageTier.Silver, DesignType.InclusiveDesign,
+        AddCommercialPackage(db, PlotSize.OneKanal, PackageTier.Silver, DesignType.ExclusiveDesign,
             processing: 150_000, soilTest: 150_000, arch: 850_000, structural: 350_000, mep: 300_000,
             elevation3D: 40_000, interior: 250_000, walkthrough: 0, landscape: 0);
 
-        AddCommercialPackage(db, PlotSize.OneKanal, PackageTier.Silver, DesignType.ExclusiveDesign,
+        AddCommercialPackage(db, PlotSize.OneKanal, PackageTier.Silver, DesignType.InclusiveDesign,
             processing: 150_000, soilTest: 150_000, arch: 850_000, structural: 350_000, mep: 300_000,
             elevation3D: 625_000, interior: 250_000, walkthrough: 0, landscape: 0);
 
-        AddCommercialPackage(db, PlotSize.OneKanal, PackageTier.Gold, DesignType.InclusiveDesign,
+        AddCommercialPackage(db, PlotSize.OneKanal, PackageTier.Gold, DesignType.ExclusiveDesign,
             processing: 150_000, soilTest: 150_000, arch: 850_000, structural: 350_000, mep: 300_000,
             elevation3D: 40_000, interior: 250_000, walkthrough: 400_000, landscape: 400_000);
 
-        AddCommercialPackage(db, PlotSize.OneKanal, PackageTier.Gold, DesignType.ExclusiveDesign,
+        AddCommercialPackage(db, PlotSize.OneKanal, PackageTier.Gold, DesignType.InclusiveDesign,
             processing: 150_000, soilTest: 150_000, arch: 850_000, structural: 350_000, mep: 300_000,
             elevation3D: 625_000, interior: 250_000, walkthrough: 400_000, landscape: 400_000);
     }
 
-    // ── Residential helper ────────────────────────────────────────────────────
+    // ?? Residential helper ????????????????????????????????????????????????????
     private static void AddResidentialPackage(
         DDFCDbContext db,
         PlotSize size, PackageTier tier, DesignType designType,
@@ -795,7 +862,7 @@ public static class DDFCDataSeeder
         db.Packages.Add(pkg);
     }
 
-    // ── Commercial helper ─────────────────────────────────────────────────────
+    // ?? Commercial helper ?????????????????????????????????????????????????????
     private static void AddCommercialPackage(
         DDFCDbContext db,
         PlotSize size, PackageTier tier, DesignType designType,
@@ -833,7 +900,7 @@ public static class DDFCDataSeeder
         db.Packages.Add(pkg);
     }
 
-    // ── Interior Design add-on packages ──────────────────────────────────────
+    // ?? Interior Design add-on packages ??????????????????????????????????????
     private static void SeedInteriorDesignPackages(DDFCDbContext db)
     {
         foreach (PlotType pType in Enum.GetValues<PlotType>())
@@ -875,7 +942,7 @@ public static class DDFCDataSeeder
         }
     }
 
-    // ── Supervision add-on packages ───────────────────────────────────────────
+    // ?? Supervision add-on packages ???????????????????????????????????????????
     private static void SeedSupervisionPackages(DDFCDbContext db)
     {
         foreach (PlotType pType in Enum.GetValues<PlotType>())
@@ -926,16 +993,16 @@ public static class DDFCDataSeeder
         SortOrder       = order,
     };
 
-    // ══════════════════════════════════════════════════════════════════════════
-    // ── Plots (DHA Peshawar Phase 1 representative sample) ────────────────────
-    // ══════════════════════════════════════════════════════════════════════════
+    // ??????????????????????????????????????????????????????????????????????????
+    // ?? Plots (DHA Peshawar Phase 1 representative sample) ????????????????????
+    // ??????????????????????????????????????????????????????????????????????????
     private static async Task SeedPlotsAsync(DDFCDbContext db)
     {
         if (await db.Plots.AnyAsync()) return;
 
         var plots = new List<Plot>();
 
-        // ── Sector A – Residential ───────────────────────────────────────────
+        // ?? Sector A ï¿½ Residential ???????????????????????????????????????????
         plots.AddRange(new[]
         {
             P("001-A", "A", "1",  "1", PlotSize.FiveMarla,  PlotType.Residential, 25m, 25m, 20m, 20m, "Road",     "Plot A-002", "Plot B-001", "Street 1"),
@@ -954,7 +1021,7 @@ public static class DDFCDataSeeder
             P("014-A", "A", "4",  "1", PlotSize.TwoKanal,   PlotType.Residential, 70m, 70m, 55m, 55m, "Plot A-013","Open Space", "Masjid",     "Main Boulevard"),
         });
 
-        // ── Sector B – Residential ───────────────────────────────────────────
+        // ?? Sector B ï¿½ Residential ???????????????????????????????????????????
         plots.AddRange(new[]
         {
             P("001-B", "B", "1",  "1", PlotSize.FiveMarla,  PlotType.Residential, 25m, 25m, 20m, 20m, "Road",      "Plot B-002", "Plot A-001", "Street 5"),
@@ -969,7 +1036,7 @@ public static class DDFCDataSeeder
             P("010-B", "B", "3",  "1", PlotSize.OneKanal,   PlotType.Residential, 50m, 50m, 40m, 40m, "Plot B-009","Open Space", "Plot E-010", "Sector Road"),
         });
 
-        // ── Sector C – Residential ───────────────────────────────────────────
+        // ?? Sector C ï¿½ Residential ???????????????????????????????????????????
         plots.AddRange(new[]
         {
             P("001-C", "C", "1",  "1", PlotSize.FiveMarla,  PlotType.Residential, 25m, 25m, 20m, 20m, "Road",      "Plot C-002", "Plot F-001", "Street 9"),
@@ -984,7 +1051,7 @@ public static class DDFCDataSeeder
             P("010-C", "C", "4",  "1", PlotSize.TwoKanal,   PlotType.Residential, 70m, 70m, 55m, 55m, "Plot C-009","Park",       "Open Space", "Main Boulevard"),
         });
 
-        // ── Sector D – Mixed (Residential & Commercial) ──────────────────────
+        // ?? Sector D ï¿½ Mixed (Residential & Commercial) ??????????????????????
         plots.AddRange(new[]
         {
             P("001-D", "D", "1",  "1", PlotSize.FiveMarla,  PlotType.Residential, 25m, 25m, 20m, 20m, "Road",      "Plot D-002", "Road",       "Street 12"),
@@ -1001,7 +1068,7 @@ public static class DDFCDataSeeder
             P("C-05-D","D", "3",  "1", PlotSize.EightMarla, PlotType.Commercial,  30m, 30m, 25m, 25m, "C-04-D",    "Open Space","Road",       "Commercial Strip"),
         });
 
-        // ── Sector E – Commercial Zone ───────────────────────────────────────
+        // ?? Sector E ï¿½ Commercial Zone ???????????????????????????????????????
         plots.AddRange(new[]
         {
             P("C-01-E","E", "1",  "1", PlotSize.FourMarla,  PlotType.Commercial,  20m, 20m, 18m, 18m, "Road",      "C-02-E",    "Road",       "Main Commercial Road"),
@@ -1043,9 +1110,9 @@ public static class DDFCDataSeeder
         BoundedWest   = west,
     };
 
-    // ══════════════════════════════════════════════════════════════════════════
-    // ── Demo Customers ────────────────────────────────────────────────────────
-    // ══════════════════════════════════════════════════════════════════════════
+    // ??????????????????????????????????????????????????????????????????????????
+    // ?? Demo Customers ????????????????????????????????????????????????????????
+    // ??????????????????????????????????????????????????????????????????????????
     private static async Task SeedCustomersAsync(DDFCDbContext db)
     {
         if (await db.Customers.AnyAsync()) return;
@@ -1065,9 +1132,9 @@ public static class DDFCDataSeeder
         await db.SaveChangesAsync();
     }
 
-    // ══════════════════════════════════════════════════════════════════════════
-    // ── Helper Methods ────────────────────────────────────────────────────────
-    // ══════════════════════════════════════════════════════════════════════════
+    // ??????????????????????????????????????????????????????????????????????????
+    // ?? Helper Methods ????????????????????????????????????????????????????????
+    // ??????????????????????????????????????????????????????????????????????????
 
     /// <summary>
     /// Adds multiple claims to a role
@@ -1083,6 +1150,51 @@ public static class DDFCDataSeeder
     /// <summary>
     /// Creates a user and assigns role and custom claims
     /// </summary>
+    private static async Task EnsureMepUsersAsync(
+        DDFCDbContext db, UserManager<User> userManager, RoleManager<Role> roleManager)
+    {
+        if (!await roleManager.RoleExistsAsync("MEP Engineer")) return;
+        var department = await db.Departments.FirstOrDefaultAsync(item => item.DepartmentCode == "MD");
+        if (department == null) return;
+
+        var accounts = new[]
+        {
+            (Name: "Tariq Mahmood", Email: "tariq.mahmood@ddfc.com.pk", License: "PEC-12347", Specialty: "HVAC"),
+            (Name: "Nadia Akram", Email: "nadia.akram@ddfc.com.pk", License: "PEC-12348", Specialty: "Electrical"),
+            (Name: "Asif Raza", Email: "asif.raza@ddfc.com.pk", License: "PEC-12349", Specialty: "Plumbing")
+        };
+        foreach (var account in accounts)
+        {
+            var normalizedEmail = userManager.NormalizeEmail(account.Email);
+            if (await db.Users.IgnoreQueryFilters().AnyAsync(user => user.NormalizedEmail == normalizedEmail)) continue;
+            var user = new User
+            {
+                UserName = account.Email,
+                Email = account.Email,
+                FullName = account.Name,
+                DepartmentId = department.Id,
+                IsActive = true,
+                IsAvailable = true,
+                EmailConfirmed = true,
+            };
+            var created = await userManager.CreateAsync(user, "Mep@2026!");
+            if (!created.Succeeded)
+                throw new InvalidOperationException($"Failed to create MEP seed user: {string.Join(", ", created.Errors.Select(error => error.Code))}");
+            var assigned = await userManager.AddToRoleAsync(user, "MEP Engineer");
+            if (!assigned.Succeeded)
+                throw new InvalidOperationException($"Failed to assign MEP seed role: {string.Join(", ", assigned.Errors.Select(error => error.Code))}");
+            var claimed = await userManager.AddClaimsAsync(user, new[]
+            {
+                new Claim("userType", "staff"),
+                new Claim("departmentCode", department.DepartmentCode),
+                new Claim("engineeringLicense", account.License),
+                new Claim("mepSpecialty", account.Specialty)
+            });
+            if (!claimed.Succeeded)
+                throw new InvalidOperationException($"Failed to add MEP seed claims: {string.Join(", ", claimed.Errors.Select(error => error.Code))}");
+        }
+    }
+
     private static async Task CreateUserWithClaims(
         UserManager<User> userManager,
         string fullName, 

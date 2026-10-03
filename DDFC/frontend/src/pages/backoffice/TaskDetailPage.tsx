@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { ArrowLeft, MessageSquare, Bell, CheckCircle, XCircle, RotateCcw, PlayCircle, FileText, Printer, CalendarDays } from 'lucide-react';
+import { ArrowLeft, MessageSquare, Bell, CheckCircle, XCircle, RotateCcw, FileText, Printer, CalendarDays } from 'lucide-react';
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
-import { fetchRequestById, approvePlan, principalApprove, principalSendBack, finalApprove, finalReject, deliverRequest, initiateRequest, rejectRequest } from '../../store/slices/requestsSlice';
+import { fetchRequestById, approvePlan, principalApprove, principalSendBack, finalApprove, finalReject, deliverRequest, initiateRequest, rejectRequest, adminReview } from '../../store/slices/requestsSlice';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { StatusBadge } from '../../components/shared/StatusBadge';
@@ -19,31 +19,38 @@ import { BuildingControlPanel } from './panels/BuildingControlPanel';
 import { DdfcAdminPanel } from './panels/DdfcAdminPanel';
 import { TransferPanel } from './panels/TransferPanel';
 import { FinancePanel } from './panels/FinancePanel';
+import { AdCoordPanel } from './panels/AdCoordPanel';
+import { BcdPanel } from './panels/BcdPanel';
+import { DocumentVerificationPanel } from './panels/DocumentVerificationPanel';
 import { ReceptionPanel } from './panels/ReceptionPanel';
 import { AdminReviewPanel } from './panels/AdminReviewPanel';
 
+import { SoilTestPanel } from './panels/SoilTestPanel';
 import { PrincipalArchitectInitialPanel } from './panels/PrincipalArchitectInitialPanel';
+import { PrincipalArchitectDesignReviewPanel } from './panels/PrincipalArchitectDesignReviewPanel';
 import { BookAppointmentModal } from '../../components/appointments/BookAppointmentModal';
 import { AnnexationModal } from '../../components/shared/AnnexationModal';
 import { PlotMergingModal } from '../../components/shared/PlotMergingModal';
 import { format } from 'date-fns';
 import { toast } from 'react-toastify';
 import api from '../../services/api';
+import { requestsService } from '../../services/endpoints';
+import { viewWatermarkedFile, viewWatermarkedHtml } from '../../services/documentViewer';
 import type { RequestStatus } from '../../types';
 
 const TABS = ['Overview', 'Timeline', 'Documents', 'Actions', 'Notes'];
 
 // Statuses where Annexation / Plot-Merge buttons are available (all pre-package steps)
 const PRE_PACKAGE_STATUSES: RequestStatus[] = [
-  'Submitted', 'Initiated', 'TransferApproved', 'FinanceApproved',
-  'BothBranchesCleared', 'PossessionLetterSigned',
+  'Submitted', 'DocumentsVerification', 'TransferApproved', 'FinanceApproved',
+  'BothBranchesCleared', 'AdCoordApproved', 'BcdLetterUploaded', 'PossessionLetterSigned',
 ];
 
 // Statuses where the Possession Letter has been signed (and cert should appear in Documents)
 const CERT_ISSUED_STATUSES: RequestStatus[] = [
   'PossessionLetterSigned',
-  'PackageSelected', 'PackagePaid', 'ArchitectAssigned', 'ArchitectureApproved', 'ThreeDCompleted',
-  'StructureCompleted', 'MEPCompleted', 'PrincipalArchitectApproved',
+  'PackageSelected', 'PackagePaid', 'SoilTestCompleted', 'ArchitectAssigned', 'ArchitectureApproved', 'ThreeDCompleted',
+  'StructureCompleted', 'MEPCompleted', 'PrincipalArchitectReviewPending', 'PrincipalArchitectApproved',
   'TownPlanningCompleted', 'BuildingControlCompleted', 'FinalApproved', 'Delivered',
 ];
 
@@ -72,7 +79,13 @@ export const TaskDetailPage: React.FC = () => {
   if (loading || !currentRequest) return <PageLoader />;
 
   const req = currentRequest;
+  const hasPaymentChallan = Boolean(req.challanNo && req.selectedPackageId);
   const dept = staffUser?.departmentName ?? '';
+  const activeSteps = req.activeWorkflowStepNames ?? [];
+  // Falls back to true when WE tracking data is absent (e.g. seeder re-ran), so status checks still gate panels
+  const stepActive = activeSteps.length === 0
+    ? () => true
+    : (partial: string) => activeSteps.some(s => s.toLowerCase().includes(partial.toLowerCase()));
 
   const handleApprovePlan = async () => {
     const planDoc = (req.documents ?? []).find((d) => d.documentType.toLowerCase().includes('plan'));
@@ -115,10 +128,18 @@ export const TaskDetailPage: React.FC = () => {
           break;
         case 'initiateRequest':
           await dispatch(initiateRequest({ id: req.id, comments: c })).unwrap();
-          toast.success('Request initiated — workflow started');
+          toast.success('Request submitted — workflow started');
           break;
         case 'rejectRequest':
           await dispatch(rejectRequest({ id: req.id, comments: c })).unwrap();
+          toast.success('Request rejected');
+          break;
+        case 'adminApprove':
+          await dispatch(adminReview({ id: req.id, data: { action: 'Initiate' } })).unwrap();
+          toast.success('Request approved — workflow advanced');
+          break;
+        case 'adminReject':
+          await dispatch(adminReview({ id: req.id, data: { action: 'Reject', rejectionReason: c } })).unwrap();
           toast.success('Request rejected');
           break;
       }
@@ -139,52 +160,108 @@ export const TaskDetailPage: React.FC = () => {
 
   const handleViewCertificate = async () => {
     try {
-      const res = await api.get<string>(`/requests/${req.id}/possession-certificate/preview`, {
-        responseType: 'text',
-      });
-      const win = window.open('', '_blank', 'noopener,noreferrer');
-      if (win) {
-        win.document.write(res.data);
-        win.document.close();
-      } else {
-        toast.warn('Popup blocked — please allow popups and try again');
-      }
-    } catch {
-      toast.error('Failed to load certificate');
+      await viewWatermarkedHtml(async () => {
+        const response = await api.get<string>(`/requests/${req.id}/possession-certificate/preview`, {
+          responseType: 'text',
+        });
+        return response.data;
+      }, staffUser?.fullName ?? '');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to load certificate');
+    }
+  };
+
+  const handleViewChallan = async () => {
+    try {
+      await viewWatermarkedHtml(() => requestsService.printPaymentChallan(req.id), staffUser?.fullName ?? '');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to load payment challan');
+    }
+  };
+
+  const handleViewFile = async (url: string) => {
+    try {
+      await viewWatermarkedFile(url, staffUser?.fullName ?? '');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to load document');
     }
   };
 
   const renderDepartmentPanel = () => {
+    if (staffUser?.roleName === 'Principal Architect' &&
+        req.status === 'ThreeDDraftPending' && stepActive('assign 3d drafter'))
+      return <ArchitecturePanel request={req} requestId={req.id} />;
     if (!dept) return null;
     const d = dept.toLowerCase();
-    if (d.includes('architecture')) {
-      if (req.status === 'ArchitectureApproved')
+    if (d.includes('3d') || d.includes('three d')) {
+      if (req.status === 'ArchitectureApproved' && stepActive('3d visualization'))
         return <ThreeDPanel request={req} requestId={req.id} />;
+      return null;
+    }
+    if (d.includes('architecture')) {
+      if (!stepActive('architect department') && !stepActive('architecture department') && !stepActive('3d department') && !stepActive('assign 3d drafter') && req.status !== 'ArchitectAssigned' && req.status !== 'ThreeDDraftPending') return null;
+      if (req.status === 'ThreeDDraftPending' || stepActive('assign 3d drafter'))
+        return <ArchitecturePanel request={req} requestId={req.id} />;
+      if (req.status === 'ArchitectureApproved' && !stepActive('architect department'))
+        return null;
       return <ArchitecturePanel request={req} requestId={req.id} />;
     }
     if (d.includes('principal')) {
-      if (req.status === 'PackagePaid' || req.status === 'ArchitectAssigned')
+      if (!stepActive('principal architect')) return null;
+      if (req.status === 'SoilTestCompleted' || req.status === 'PackagePaid')
         return <PrincipalArchitectInitialPanel request={req} requestId={req.id} />;
-      // else fall through to action-based panel (handled in Actions tab)
+      if (req.status === 'PrincipalArchitectReviewPending' || req.status === 'PrincipalArchitectApproved')
+        return <PrincipalArchitectDesignReviewPanel request={req} />;
       return null;
     }
-    if (d.includes('structure')) return <StructurePanel requestId={req.id} request={req} />;
-    if (d.includes('mep')) return <MepPanel requestId={req.id} request={req} />;
+    if (d.includes('structure')) {
+      if (!stepActive('structure')) return null;
+      return <StructurePanel requestId={req.id} request={req} />;
+    }
+    if (d.includes('mep')) {
+      if (!stepActive('mep')) return null;
+      return <MepPanel requestId={req.id} request={req} />;
+    }
     if (d.includes('building control')) {
+      if (req.status === 'PackagePaid' && stepActive('soil test'))
+        return <SoilTestPanel request={req} requestId={req.id} />;
+      if (req.status === 'AdCoordApproved' && stepActive('bcd'))
+        return <BcdPanel requestId={req.id} />;
+      if (!stepActive('building control')) return null;
       return <BuildingControlPanel request={req} requestId={req.id} />;
     }
     if (d.includes('administration') || d.includes('ddfc admin')) {
       const s = req.status;
-      // After possession letter is signed, go directly to package selection
-      if (s === 'PossessionLetterSigned' || s === 'PackageSelected') {
+      if (s === 'DocumentsVerification' && stepActive('documents verification'))
+        return <DocumentVerificationPanel request={req} requestId={req.id} />;
+      if (s === 'AdminReviewPending' && stepActive('post-payment review'))
+        return <AdminReviewPanel request={req} requestId={req.id} />;
+      if ((s === 'BcdLetterUploaded' || s === 'PossessionIssued') && stepActive('ddfc admin'))
+        return <DdfcAdminPanel request={req} requestId={req.id} />;
+      if ((s === 'PossessionLetterSigned' && stepActive('package selection')) ||
+          (s === 'PackageSelected' && stepActive('payment confirmation')))
+        return <ReceptionPanel request={req} requestId={req.id} />;
+      return null;
+    }
+    if (d.includes('transfer')) {
+      if (!stepActive('transfer')) return null;
+      return <TransferPanel requestId={req.id} />;
+    }
+    if (d.includes('finance')) {
+      if (!stepActive('finance')) return null;
+      return <FinancePanel request={req} requestId={req.id} />;
+    }
+    if (d.includes('ad coord')) {
+      if (!stepActive('ad coordinator')) return null;
+      return <AdCoordPanel requestId={req.id} />;
+    }
+    if (d.includes('reception') || d.includes('front desk')) {
+      if (req.status === 'Submitted' && (stepActive('reception') || stepActive('document review'))) {
         return <ReceptionPanel request={req} requestId={req.id} />;
       }
-      // BothBranchesCleared or PossessionIssued (legacy): show sign panel
-      return <DdfcAdminPanel request={req} requestId={req.id} />;
+      if (!stepActive('reception')) return null;
+      return <ReceptionPanel request={req} requestId={req.id} />;
     }
-    if (d.includes('transfer')) return <TransferPanel requestId={req.id} />;
-    if (d.includes('finance')) return <FinancePanel request={req} requestId={req.id} />;
-    if (d.includes('reception') || d.includes('front desk')) return <ReceptionPanel request={req} requestId={req.id} />;
     return null;
   };
 
@@ -201,7 +278,7 @@ export const TaskDetailPage: React.FC = () => {
         <div className="flex-1">
           <div className="flex items-center gap-3">
             <h1 className="text-xl font-bold text-gray-900 font-mono">{req.requestId}</h1>
-            <StatusBadge status={req.status} />
+            <StatusBadge status={req.status} activeStepNames={req.activeWorkflowStepNames} />
           </div>
           <p className="text-sm text-gray-500">
             {req.customerName} • Plot {req.plotNumber}, Sector {req.sectorNo} •{' '}
@@ -219,7 +296,7 @@ export const TaskDetailPage: React.FC = () => {
       </div>
 
       {/* Workflow Stepper */}
-      <WorkflowStepper currentStatus={req.status} activeStepNames={req.activeWorkflowStepNames} />
+      <WorkflowStepper currentStatus={req.status} activeStepNames={req.activeWorkflowStepNames} requestType={req.requestType} />
 
       {/* Tabs */}
       <div className="flex gap-1 border-b border-gray-200">
@@ -344,8 +421,22 @@ export const TaskDetailPage: React.FC = () => {
             </div>
           )}
 
-          {/* Admin Review Panel — shown for Admin or Possession Admin when request is Submitted */}
-          {req.status === 'Submitted' && (staffUser?.roleName === 'Admin' || staffUser?.roleName === 'Possession Admin') && (
+          {/* Admin Review Panel — role-based fallback for Admin/Possession Admin not in administration dept */}
+          {req.status === 'DocumentsVerification'
+            && stepActive('documents verification')
+            && (staffUser?.roleName === 'Admin' || staffUser?.roleName === 'Possession Admin')
+            && !dept.toLowerCase().includes('administration')
+            && (
+            <div className="lg:col-span-2">
+              <DocumentVerificationPanel request={req} requestId={req.id} />
+            </div>
+          )}
+
+          {req.status === 'AdminReviewPending'
+            && stepActive('post-payment review')
+            && (staffUser?.roleName === 'Admin' || staffUser?.roleName === 'Possession Admin')
+            && !dept.toLowerCase().includes('administration')
+            && (
             <div className="lg:col-span-2">
               <AdminReviewPanel request={req} requestId={req.id} />
             </div>
@@ -362,6 +453,20 @@ export const TaskDetailPage: React.FC = () => {
       {activeTab === 'Documents' && (
         <Card title="Documents">
           <div className="space-y-2">
+            {hasPaymentChallan && (
+              <div className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 bg-gray-50 p-3">
+                <div className="flex min-w-0 items-center gap-2">
+                  <FileText className="h-4 w-4 shrink-0 text-gray-500" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-gray-800">Payment Challan</p>
+                    <p className="break-all text-xs text-gray-500">{req.challanNo}</p>
+                  </div>
+                </div>
+                <button onClick={handleViewChallan} className="flex shrink-0 items-center gap-1 text-sm text-blue-600 hover:underline">
+                  <Printer className="h-3.5 w-3.5" /> View / Print
+                </button>
+              </div>
+            )}
             {/* Possession Certificate — virtual entry once issued */}
             {CERT_ISSUED_STATUSES.includes(req.status) && (
               <div className="flex items-center justify-between p-3 bg-amber-50 border border-amber-200 rounded-lg">
@@ -401,19 +506,18 @@ export const TaskDetailPage: React.FC = () => {
                       </p>
                     </div>
                   </div>
-                  <a
-                    href={doc.fileUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                  <button
+                    type="button"
+                    onClick={() => handleViewFile(doc.fileUrl)}
                     className="text-blue-600 text-sm hover:underline shrink-0 ml-3"
                   >
                     View
-                  </a>
+                  </button>
                 </div>
               );
             })}
 
-            {!CERT_ISSUED_STATUSES.includes(req.status) && (req.documents ?? []).length === 0 && (
+            {!hasPaymentChallan && !CERT_ISSUED_STATUSES.includes(req.status) && (req.documents ?? []).length === 0 && (
               <p className="text-gray-400 text-center py-8">No documents uploaded</p>
             )}
           </div>
@@ -422,56 +526,109 @@ export const TaskDetailPage: React.FC = () => {
 
       {activeTab === 'Actions' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {/* Admin Review Panel in Actions tab — Possession Admin only (Admin is superadmin, not a workflow participant) */}
-          {req.status === 'Submitted' && staffUser?.roleName === 'Possession Admin' && (
+          {/* Admin Review Panel in Actions tab — role-based fallback for admin users not in administration dept */}
+          {req.status === 'DocumentsVerification'
+            && stepActive('documents verification')
+            && (staffUser?.roleName === 'Admin' || staffUser?.roleName === 'Possession Admin')
+            && !dept.toLowerCase().includes('administration')
+            && (
             <div className="lg:col-span-2">
               <AdminReviewPanel request={req} requestId={req.id} />
             </div>
           )}
 
+          {/* Department-specific panel — same as Overview so all actions are accessible here too */}
+          {renderDepartmentPanel() && (
+            <div className="lg:col-span-2">{renderDepartmentPanel()}</div>
+          )}
+
           <Card title="Workflow Actions">
             <div className="space-y-3">
-              {/* Submitted — Initiate or Reject (Reception Officer only) */}
-              {req.status === 'Submitted' && (staffUser?.roleName === 'Reception Officer' || dept.toLowerCase().includes('reception') || dept.toLowerCase().includes('front desk')) && (
+              {/* ── Reception / Front Desk – status-tracking for possession process ── */}
+              {(staffUser?.roleName === 'Reception Officer' || dept.toLowerCase().includes('reception') || dept.toLowerCase().includes('front desk')) && (
                 <>
-                  <Button
-                    variant="primary"
-                    className="w-full"
-                    loading={actionLoading}
-                    onClick={() => runAction('initiateRequest')}
-                    icon={<PlayCircle size={16} />}
-                  >
-                    Initiate Request
-                  </Button>
-                  <Button
-                    variant="danger"
-                    className="w-full"
-                    loading={actionLoading}
-                    onClick={() => openActionWithComments('rejectRequest')}
-                    icon={<XCircle size={16} />}
-                  >
-                    Reject Request
-                  </Button>
+                        {req.status === 'Submitted' && (
+                    <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3 text-center">
+                          ⏳ Request is being prepared for <strong>Documents Verification</strong>.
+                    </p>
+                  )}
+                  {req.status === 'DocumentsVerification' && stepActive('documents verification') && (
+                    <p className="text-sm text-blue-700 bg-blue-50 border border-blue-200 rounded-lg p-3 text-center">
+                      ⏳ <strong>Reception</strong> is verifying the submitted documents.
+                    </p>
+                  )}
+                  {req.status === 'DocumentsVerification' && stepActive('transfer') && (
+                    <p className="text-sm text-blue-700 bg-blue-50 border border-blue-200 rounded-lg p-3 text-center">
+                      🔄 <strong>Transfer Branch</strong> is reviewing the request.
+                    </p>
+                  )}
+                  {(req.status === 'TransferApproved' || req.status === 'FinanceApproved') && (
+                    <p className="text-sm text-blue-700 bg-blue-50 border border-blue-200 rounded-lg p-3 text-center">
+                      🔄 <strong>Finance Branch</strong> is reviewing the request.
+                    </p>
+                  )}
+                  {req.status === 'BothBranchesCleared' && (
+                    <p className="text-sm text-purple-700 bg-purple-50 border border-purple-200 rounded-lg p-3 text-center">
+                      🔄 <strong>AD Coordinator</strong> is reviewing the request.
+                    </p>
+                  )}
+                  {req.status === 'AdCoordApproved' && (
+                    <p className="text-sm text-purple-700 bg-purple-50 border border-purple-200 rounded-lg p-3 text-center">
+                      ⏳ Pending <strong>BCD Possession Letter Upload</strong>.
+                    </p>
+                  )}
+                  {req.status === 'BcdLetterUploaded' && (
+                    <p className="text-sm text-purple-700 bg-purple-50 border border-purple-200 rounded-lg p-3 text-center">
+                      ⏳ Pending <strong>DDFC Admin Possession Letter</strong> signing.
+                    </p>
+                  )}
+                  {req.status === 'TownPlanningCompleted' && (
+                    <p className="text-sm text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-lg p-3 text-center">
+                      ⏳ Awaiting <strong>Possession Certificate</strong> issuance by Town Planning.
+                    </p>
+                  )}
+                  {(req.status === 'PossessionIssued' || req.status === 'FinalApproved')
+                    && stepActive('document delivery') && (
+                    <Button
+                      variant="primary"
+                      className="w-full"
+                      loading={actionLoading}
+                      onClick={() => runAction('deliver')}
+                      icon={<CheckCircle size={16} />}
+                    >
+                      Mark as Delivered
+                    </Button>
+                  )}
+                  {req.status === 'Rejected' && (
+                    <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg p-3 text-center">
+                      ❌ This request was <strong>rejected</strong>.
+                    </p>
+                  )}
+                  {req.status === 'Delivered' && (
+                    <p className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg p-3 text-center">
+                      ✅ Request has been <strong>delivered</strong> to the customer.
+                    </p>
+                  )}
                 </>
               )}
 
-              {/* Architecture — send plan for customer approval */}
-              {dept.toLowerCase().includes('architecture') && (
-                <>
-                  <Button
-                    variant="primary"
-                    className="w-full"
-                    loading={actionLoading}
-                    onClick={handleApprovePlan}
-                    icon={<CheckCircle size={16} />}
-                  >
-                    Approve Plan (Customer Review)
-                  </Button>
-                </>
+              {/* ── Step 10: Architecture – Approve Plan for Customer Review ─ */}
+              {dept.toLowerCase().includes('architecture') && (req.status === 'ArchitectAssigned' || req.status === 'ArchitectureApproved')
+                && stepActive('architect department') && (
+                <Button
+                  variant="primary"
+                  className="w-full"
+                  loading={actionLoading}
+                  onClick={handleApprovePlan}
+                  icon={<CheckCircle size={16} />}
+                >
+                  Approve Plan (Customer Review)
+                </Button>
               )}
 
-              {/* Principal Architect actions */}
-              {dept.toLowerCase().includes('principal') && (
+              {/* ── Step 14: Principal Architect – Design Review ─────────── */}
+              {dept.toLowerCase().includes('principal') && (req.status === 'PrincipalArchitectReviewPending' || req.status === 'PrincipalArchitectApproved')
+                && stepActive('principal architect') && (
                 <>
                   <Button
                     variant="primary"
@@ -480,7 +637,7 @@ export const TaskDetailPage: React.FC = () => {
                     onClick={() => runAction('principalApprove')}
                     icon={<CheckCircle size={16} />}
                   >
-                    Principal Approve
+                    Approve Designs
                   </Button>
                   <Button
                     variant="outline"
@@ -494,8 +651,64 @@ export const TaskDetailPage: React.FC = () => {
                 </>
               )}
 
-              {/* DHA Design Head actions */}
-              {dept.toLowerCase().includes('design') && (
+              {/* ── Step 3: Transfer Branch – NOC/NDC Review ────────────── */}
+              {dept.toLowerCase().includes('transfer') && req.status === 'DocumentsVerification' && stepActive('transfer') && (
+                <p className="text-xs text-blue-600 text-center py-2">
+                  Use the <strong>Transfer Branch Panel</strong> above to Approve, Reject, or Request Clarification.
+                </p>
+              )}
+
+              {/* ── Step 4: Finance Branch – Dues Clearance ──────────────── */}
+              {dept.toLowerCase().includes('finance') && (req.status === 'DocumentsVerification' || req.status === 'TransferApproved') && stepActive('finance') && (
+                <p className="text-xs text-blue-600 text-center py-2">
+                  Use the <strong>Finance Branch Panel</strong> above to Approve or Reject dues clearance.
+                </p>
+              )}
+
+              {/* ── Step 4b: AD Coordinator – Review ──────────────────────── */}
+              {dept.toLowerCase().includes('ad coord') && req.status === 'BothBranchesCleared' && stepActive('ad coordinator') && (
+                <p className="text-xs text-blue-600 text-center py-2">
+                  Use the <strong>AD Coordinator Panel</strong> above to Approve or Reject the request.
+                </p>
+              )}
+
+              {/* ── Step 5: DDFC Admin – Sign Possession Letter ──────────── */}
+              {(dept.toLowerCase().includes('administration') || dept.toLowerCase().includes('ddfc admin'))
+                && (req.status === 'BcdLetterUploaded' || req.status === 'PossessionIssued')
+                && stepActive('ddfc admin') && (
+                <p className="text-xs text-blue-600 text-center py-2">
+                  Use the <strong>DDFC Admin Panel</strong> above to sign the Possession Letter.
+                </p>
+              )}
+
+              {/* ── Step 4c: BCD – Upload Possession Letter ──────────────── */}
+              {dept.toLowerCase().includes('building control') && req.status === 'AdCoordApproved' && stepActive('bcd') && (
+                <p className="text-xs text-blue-600 text-center py-2">
+                  Use the <strong>BCD Panel</strong> above to upload the possession letter.
+                </p>
+              )}
+
+              {/* ── Documents Verification ─────────────────────────────── */}
+              {(dept.toLowerCase().includes('administration') || dept.toLowerCase().includes('ddfc admin')
+                || staffUser?.roleName === 'Admin' || staffUser?.roleName === 'Possession Admin')
+                && req.status === 'DocumentsVerification' && stepActive('documents verification') && (
+                <p className="text-xs text-blue-600 text-center py-2">
+                  Use the <strong>Documents Verification Panel</strong> above to mark each document complete or incomplete.
+                </p>
+              )}
+
+              {/* ── Post-payment Admin Review ───────────────────────────── */}
+              {(dept.toLowerCase().includes('administration') || dept.toLowerCase().includes('ddfc admin')
+                || staffUser?.roleName === 'Admin' || staffUser?.roleName === 'Possession Admin')
+                && req.status === 'AdminReviewPending' && stepActive('post-payment review') && (
+                <p className="text-xs text-blue-600 text-center py-2">
+                  Use the <strong>Admin Review Panel</strong> above to approve or reject the paid request.
+                </p>
+              )}
+
+              {/* ── Step 16: DHA Design Head – Final Approval ─────────────── */}
+              {dept.toLowerCase().includes('design') && req.status === 'BuildingControlCompleted'
+                && stepActive('dha design head') && (
                 <>
                   <Button
                     variant="primary"
@@ -515,25 +728,39 @@ export const TaskDetailPage: React.FC = () => {
                   >
                     Final Reject
                   </Button>
-                  <Button
-                    variant="secondary"
-                    className="w-full"
-                    loading={actionLoading}
-                    onClick={() => runAction('deliver')}
-                    icon={<CheckCircle size={16} />}
-                  >
-                    Mark Delivered
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="w-full"
-                    loading={actionLoading}
-                    onClick={() => runAction('issuePossessionCert')}
-                    icon={<CheckCircle size={16} />}
-                  >
-                    Issue Possession Certificate
-                  </Button>
                 </>
+              )}
+
+              {dept.toLowerCase().includes('building control') && req.status === 'PackagePaid' && stepActive('soil test') && (
+                <p className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
+                  Submit the report in the Soil Test panel above to advance to Principal Architect Initial Review.
+                </p>
+              )}
+
+              {/* Empty state — shown when no action condition above matches */}
+              {!(
+                (staffUser?.roleName === 'Reception Officer' || dept.toLowerCase().includes('reception') || dept.toLowerCase().includes('front desk')) ||
+                (dept.toLowerCase().includes('architecture') && (req.status === 'ArchitectAssigned' || req.status === 'ArchitectureApproved') && stepActive('architect department')) ||
+                (dept.toLowerCase().includes('principal') && (req.status === 'PrincipalArchitectReviewPending' || req.status === 'PrincipalArchitectApproved') && stepActive('principal architect')) ||
+                (dept.toLowerCase().includes('design') && req.status === 'BuildingControlCompleted' && stepActive('dha design head')) ||
+                (dept.toLowerCase().includes('transfer') && req.status === 'DocumentsVerification' && stepActive('transfer')) ||
+                (dept.toLowerCase().includes('finance') && (req.status === 'DocumentsVerification' || req.status === 'TransferApproved') && stepActive('finance')) ||
+                (dept.toLowerCase().includes('ad coord') && req.status === 'BothBranchesCleared' && stepActive('ad coordinator')) ||
+                (dept.toLowerCase().includes('building control') && req.status === 'AdCoordApproved' && stepActive('bcd')) ||
+                (dept.toLowerCase().includes('building control') && req.status === 'PackagePaid' && stepActive('soil test')) ||
+                ((dept.toLowerCase().includes('administration') || dept.toLowerCase().includes('ddfc admin') ||
+                  staffUser?.roleName === 'Admin' || staffUser?.roleName === 'Possession Admin') &&
+                  req.status === 'DocumentsVerification' && stepActive('documents verification')) ||
+                ((dept.toLowerCase().includes('administration') || dept.toLowerCase().includes('ddfc admin')) &&
+                  (req.status === 'BcdLetterUploaded' || req.status === 'PossessionIssued') && stepActive('ddfc admin')) ||
+                ((dept.toLowerCase().includes('administration') || dept.toLowerCase().includes('ddfc admin') ||
+                  staffUser?.roleName === 'Admin' || staffUser?.roleName === 'Possession Admin') &&
+                  req.status === 'AdminReviewPending' && stepActive('post-payment review'))
+              ) && (
+                <p className="text-sm text-gray-400 text-center py-4">
+                  No workflow actions available for the current step.
+                  {(renderDepartmentPanel()) ? ' Use the panel above to take action.' : ''}
+                </p>
               )}
             </div>
           </Card>
@@ -571,7 +798,7 @@ export const TaskDetailPage: React.FC = () => {
       <Modal
         isOpen={showCommentsModal}
         onClose={() => { setShowCommentsModal(false); setPendingAction(null); setComments(''); }}
-        title={pendingAction === 'principalSendBack' ? 'Send Back — Reason' : pendingAction === 'rejectRequest' ? 'Reject Request — Reason' : 'Final Reject — Reason'}
+        title={pendingAction === 'principalSendBack' ? 'Send Back — Reason' : pendingAction === 'rejectRequest' ? 'Reject Request — Reason' : pendingAction === 'adminReject' ? 'Reject — Reason' : 'Final Reject — Reason'}
         footer={
           <div className="flex gap-2 justify-end">
             <Button variant="ghost" onClick={() => { setShowCommentsModal(false); setPendingAction(null); setComments(''); }}>

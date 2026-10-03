@@ -59,4 +59,8 @@ public class TemplatesController : ControllerBase
     }
 }
 
-public record UpdateTemplateDto(string? Content, string? TemplateName);
+public class UpdateTemplateDto
+{
+    public string? Content { get; set; }
+    public string? TemplateName { get; set; }
+}

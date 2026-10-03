@@ -21,4 +21,10 @@ public class StepAction : BaseEntity
     /// Use for rejection/decline actions (e.g., "Reject Application", "Decline Loan").
     /// </summary>
     public bool IsRejectionAction { get; set; } = false;
+
+    /// <summary>
+    /// If true, completing this action resets the step's actions to Pending without advancing the workflow.
+    /// Use for "incomplete / request more info" actions where the step must be re-reviewed.
+    /// </summary>
+    public bool IsLoopbackAction { get; set; } = false;
 }

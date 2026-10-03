@@ -88,10 +88,9 @@ public static class RevisedPlanWorkflowSeeder
             Order = 2,
             ActionCompletionMode = ActionCompletionMode.Any
         };
-        step2.Actions.Add(new StepAction { Name = "Admin Review \u2013 Initiate", ActionType = ActionType.Approval });
-        step2.Actions.Add(new StepAction { Name = "Admin Review \u2013 Reject", ActionType = ActionType.Rejection, IsRejectionAction = true });
-
-        // ---- Step 3: Package Selection ----
+        step2.Actions.Add(new StepAction { Name = "Verified",   ActionType = ActionType.Approval });
+        step2.Actions.Add(new StepAction { Name = "Incomplete", ActionType = ActionType.General,   IsLoopbackAction  = true });
+        step2.Actions.Add(new StepAction { Name = "Invalid",    ActionType = ActionType.Rejection,  IsRejectionAction = true });
         var step3 = new ProcessStep
         {
             Name = "Reception \u2013 Package Selection",
@@ -103,7 +102,7 @@ public static class RevisedPlanWorkflowSeeder
         // ---- Step 4: Payment Confirmation ----
         var step4 = new ProcessStep
         {
-            Name = "Finance Branch \u2013 Payment Confirmation",
+            Name = "Reception \u2013 Payment Confirmation",
             Order = 4,
             ActionCompletionMode = ActionCompletionMode.All
         };
@@ -114,7 +113,7 @@ public static class RevisedPlanWorkflowSeeder
         {
             Name = "Principal Architect \u2013 Initial Review",
             Order = 5,
-            ActionCompletionMode = ActionCompletionMode.All
+            ActionCompletionMode = ActionCompletionMode.Any
         };
         step5.Actions.Add(new StepAction { Name = "Upload Soil Test", ActionType = ActionType.Upload });
         step5.Actions.Add(new StepAction { Name = "Assign Architect", ActionType = ActionType.General });
@@ -211,12 +210,12 @@ public static class RevisedPlanWorkflowSeeder
         // Step 1 → Step 2
         var t1_2 = new StepTransition { FromStepId = step1.Id, ToStepId = step2.Id, IsDefault = true };
 
-        // Step 2 → Step 3 (on Initiate)
+        // Step 2 → Step 3 (on Verified)
         var t2_3 = new StepTransition
         {
             FromStepId = step2.Id,
             ToStepId   = step3.Id,
-            Condition  = "action=Admin Review \u2013 Initiate",
+            Condition  = "action=Verified",
             IsDefault  = false,
             Priority   = 1
         };
