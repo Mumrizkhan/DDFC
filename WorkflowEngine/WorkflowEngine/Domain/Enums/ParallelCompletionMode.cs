@@ -20,5 +20,7 @@ public enum ParallelCompletionMode
     /// A minimum number of parallel steps must complete
     /// Configured via MinimumCompletionCount property
     /// </summary>
-    Minimum = 2
+    Minimum = 2,
+
+    Independent = 3
 }

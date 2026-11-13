@@ -8,6 +8,8 @@ import { useAppDispatch } from '../../store/hooks';
 import { assignCadOperator, submitDeptCadFile } from '../../store/slices/requestsSlice';
 import type { CadType, PossessionRequest } from '../../types';
 import api from '../../services/api';
+import { DraftsmanAssignment } from './DraftsmanAssignment';
+import type { DraftsmanParent } from '../../services/draftsmanTasks';
 
 interface StaffUser {
   userId: string;
@@ -26,7 +28,15 @@ interface Props {
   accentClass?: string;
 }
 
-export const CadSection: React.FC<Props> = ({
+export const CadSection: React.FC<Props> = (props) => {
+  const legacy = props.request.cadAssignments?.find((assignment) => assignment.cadType === props.cadType);
+  if (!props.assigneeRole && !(legacy && !legacy.completedAt)) {
+    return <DraftsmanAssignment parentStep={props.cadType as DraftsmanParent} requestId={props.requestId} request={props.request} />;
+  }
+  return <LegacyCadSection {...props} />;
+};
+
+const LegacyCadSection: React.FC<Props> = ({
   cadType,
   label,
   requestId,
@@ -66,7 +76,7 @@ export const CadSection: React.FC<Props> = ({
     const validGuid = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/; 
 
     if (!candidateId || !validGuid.test(candidateId)) {
-      toast.error('Please select a valid CAD operator');
+      toast.error('Please select a valid Drafts Man');
       return;
     }
 
@@ -78,7 +88,7 @@ export const CadSection: React.FC<Props> = ({
       toast.success(`${label} assigned`);
       setSelectedUser('');
     } catch {
-      toast.error('Failed to assign CAD operator');
+      toast.error('Failed to assign Drafts Man');
     } finally {
       setAssigning(false);
     }
@@ -128,7 +138,7 @@ export const CadSection: React.FC<Props> = ({
         </div>
       ) : (
         <p className="text-xs text-gray-400 italic">
-          {assigneeRole === 'Architect' ? 'No architect assigned yet' : assigneeRole === '3D Operator' ? 'No drafter assigned yet' : 'No CAD operator assigned yet'}
+          {assigneeRole === 'Architect' ? 'No architect assigned yet' : 'No Drafts Man assigned yet'}
         </p>
       )}
 
@@ -136,7 +146,7 @@ export const CadSection: React.FC<Props> = ({
       <div className="flex gap-2 items-end">
         <div className="flex-1">
           <Select
-            label={assigneeRole === 'Architect' ? 'Assign Architect' : assigneeRole === '3D Operator' ? 'Assign Drafter' : 'Assign CAD Operator'}
+            label={assigneeRole === 'Architect' ? 'Assign Architect' : 'Assign Drafts Man'}
             value={selectedUserId}
             onChange={(e) => setSelectedUser(e.target.value)}
             options={[

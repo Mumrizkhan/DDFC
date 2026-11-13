@@ -34,7 +34,8 @@ export const PrincipalArchitectInitialPanel: React.FC<Props> = ({ request, reque
 
   const isComplete = request.status !== 'PackagePaid' && request.status !== 'SoilTestCompleted';
   // DDFC workflow completes soil test in its own step first; Revised/As-Built have no such step.
-  const needsInlineSoilTest = request.status === 'PackagePaid';
+  const needsInlineSoilTest = request.status === 'PackagePaid' &&
+    request.requestType != null && request.requestType !== 'PossessionDesign';
 
   // Load architects from the Architecture department
   useEffect(() => {

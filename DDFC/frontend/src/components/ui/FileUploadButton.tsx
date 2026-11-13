@@ -11,6 +11,7 @@ interface Props {
   label?: string;
   required?: boolean;
   accept?: string;
+  uploadText?: string;
 }
 
 export const FileUploadButton: React.FC<Props> = ({
@@ -19,6 +20,7 @@ export const FileUploadButton: React.FC<Props> = ({
   label,
   required,
   accept = '.pdf,.jpg,.jpeg,.png',
+  uploadText = 'Click to upload PDF / JPG / PNG',
 }) => {
   const [uploading, setUploading] = useState(false);
   const [fileName, setFileName]   = useState('');
@@ -75,7 +77,7 @@ export const FileUploadButton: React.FC<Props> = ({
         ) : (
           <>
             <UploadCloud size={16} />
-            Click to upload PDF / JPG / PNG
+            {uploadText}
           </>
         )}
       </button>

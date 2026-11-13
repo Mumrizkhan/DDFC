@@ -31,8 +31,8 @@ export const StructurePanel: React.FC<Props> = ({ requestId, request }) => {
       toast.success('Structural review marked complete');
       setFileUrl('');
       setObservations('');
-    } catch {
-      toast.error('Failed to submit structural review');
+    } catch (error) {
+      toast.error(typeof error === 'string' ? error : 'Failed to submit structural review');
     } finally {
       setLoading(false);
     }

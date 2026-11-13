@@ -14,13 +14,16 @@ interface Props {
 
 export const BcdPanel: React.FC<Props> = ({ requestId }) => {
   const dispatch = useAppDispatch();
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [file, setFile] = useState<File | null>(null);
-  const [fileUrl, setFileUrl] = useState('');
+  const memberInputRef = useRef<HTMLInputElement>(null);
+  const dhaInputRef = useRef<HTMLInputElement>(null);
+  const [memberFile, setMemberFile] = useState<File | null>(null);
+  const [dhaFile, setDhaFile] = useState<File | null>(null);
+  const [memberFileUrl, setMemberFileUrl] = useState('');
+  const [dhaFileUrl, setDhaFileUrl] = useState('');
   const [comments, setComments] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>, copy: 'member' | 'dha') => {
     const selectedFile = event.target.files?.[0];
     event.target.value = '';
     if (!selectedFile) return;
@@ -32,41 +35,57 @@ export const BcdPanel: React.FC<Props> = ({ requestId }) => {
       toast.error('Choose a non-empty file smaller than 20 MB');
       return;
     }
-    setFile(selectedFile);
-    setFileUrl('');
+    if (copy === 'member') {
+      setMemberFile(selectedFile);
+      setMemberFileUrl('');
+    } else {
+      setDhaFile(selectedFile);
+      setDhaFileUrl('');
+    }
   };
 
   const handleSubmit = async () => {
-    if (!file) {
-      toast.error('Please select a possession letter file');
+    if (!memberFile || !dhaFile) {
+      toast.error('Please select both possession letter copies');
       return;
     }
 
     setSubmitting(true);
     try {
-      let uploadedUrl = fileUrl;
-      if (!uploadedUrl) {
+      const uploadFile = async (file: File) => {
         const formData = new FormData();
         formData.append('file', file);
         const response = await api.post<{ url: string }>('/uploads', formData, {
           headers: { 'Content-Type': 'multipart/form-data' },
         });
-        uploadedUrl = response.data.url;
-        setFileUrl(uploadedUrl);
+        return response.data.url;
+      };
+      let uploadedMemberUrl = memberFileUrl;
+      if (!uploadedMemberUrl) {
+        uploadedMemberUrl = await uploadFile(memberFile);
+        setMemberFileUrl(uploadedMemberUrl);
+      }
+      let uploadedDhaUrl = dhaFileUrl;
+      if (!uploadedDhaUrl) {
+        uploadedDhaUrl = await uploadFile(dhaFile);
+        setDhaFileUrl(uploadedDhaUrl);
       }
       await dispatch(
         bcdUploadPossessionLetter({
           id: requestId,
-          fileUrl: uploadedUrl,
+          fileUrl: uploadedMemberUrl,
+          dhaCopyFileUrl: uploadedDhaUrl,
           comments: comments.trim() || undefined,
         })
       ).unwrap();
-      toast.success('Possession letter uploaded and forwarded to DDFC Admin');
-      setFile(null);
-      setFileUrl('');
+      toast.success('Possession letter copies uploaded and forwarded to DDFC Admin');
+      setMemberFile(null);
+      setDhaFile(null);
+      setMemberFileUrl('');
+      setDhaFileUrl('');
       setComments('');
     } catch {
-      toast.error('Failed to upload possession letter');
+      toast.error('Failed to upload possession letter copies');
     } finally {
       setSubmitting(false);
     }
@@ -76,30 +95,52 @@ export const BcdPanel: React.FC<Props> = ({ requestId }) => {
     <Card title="BCD – Upload Possession Letter">
       <div className="space-y-4">
         <p className="text-sm text-gray-500">
-          Upload the possession letter after AD Coordinator approval. This step must be completed
+          Upload the member and DHA copies after AD Coordinator approval. This step must be completed
           before DDFC Admin can sign.
         </p>
 
         <div className="space-y-2">
           <input
-            ref={inputRef}
+            ref={memberInputRef}
             type="file"
             accept=".pdf,.jpg,.jpeg,.png"
-            aria-label="Possession letter file"
+            aria-label="Possession letter member copy"
             className="hidden"
-            onChange={handleFileChange}
+            onChange={(event) => handleFileChange(event, 'member')}
             disabled={submitting}
           />
           <Button
             type="button"
             variant="outline"
             disabled={submitting}
-            onClick={() => inputRef.current?.click()}
+            onClick={() => memberInputRef.current?.click()}
             icon={<Upload size={16} />}
           >
-            Upload Possession Letter
+            Upload Member Copy
           </Button>
-          {file && <p className="break-all text-sm text-gray-700" role="status">{file.name}</p>}
+          {memberFile && <p className="break-all text-sm text-gray-700" role="status">{memberFile.name}</p>}
+        </div>
+
+        <div className="space-y-2">
+          <input
+            ref={dhaInputRef}
+            type="file"
+            accept=".pdf,.jpg,.jpeg,.png"
+            aria-label="Possession letter DHA copy"
+            className="hidden"
+            onChange={(event) => handleFileChange(event, 'dha')}
+            disabled={submitting}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            disabled={submitting}
+            onClick={() => dhaInputRef.current?.click()}
+            icon={<Upload size={16} />}
+          >
+            Upload DHA Copy
+          </Button>
+          {dhaFile && <p className="break-all text-sm text-gray-700" role="status">{dhaFile.name}</p>}
         </div>
 
         <Input
@@ -112,7 +153,7 @@ export const BcdPanel: React.FC<Props> = ({ requestId }) => {
         <Button
           variant="primary"
           className="w-full"
-          disabled={!file}
+          disabled={!memberFile || !dhaFile}
           loading={submitting}
           onClick={handleSubmit}
           icon={<Upload size={16} />}

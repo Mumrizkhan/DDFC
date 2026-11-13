@@ -215,7 +215,7 @@ export const requestsService = {
   adCoordReject: (id: string, data: { comments?: string }) =>
     api.post(`/requests/${id}/ad-coord/reject`, data).then((r) => r.data),
 
-  bcdUploadPossessionLetter: (id: string, data: { fileUrl: string; comments?: string }) =>
+  bcdUploadPossessionLetter: (id: string, data: { fileUrl: string; dhaCopyFileUrl: string; comments?: string }) =>
     api.post(`/requests/${id}/bcd/upload-possession-letter`, data).then((r) => r.data),
 
   ddfcAdminSign: (id: string, data: {

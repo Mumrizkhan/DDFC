@@ -1,5 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using DDFC.Infrastructure.Persistence;
 using WorkflowEngine.Domain.Entities;
 using WorkflowEngine.Domain.Enums;
 using WorkflowEngine.Infrastructure.Persistence;
@@ -13,8 +14,6 @@ namespace DDFC.Infrastructure.Data;
 ///   Step 5       â€” AD Coordinator Review (after Finance, before DDFC Admin signs)
 ///   Step 6       â€” BCD Upload Possession Letter
 ///   Step 9       â€” Admin Review (after Payment, before Soil Test)
-///   Step 10      â€” Soil Test (before Principal Architect Initial Review)
-///   Steps 13â†’14â†’15 â€” 3D Visualization, Architect drafter upload, then Structure
 /// Existing process definitions are updated in place to preserve runtime requests.
 /// </summary>
 public static class DDFCWorkflowSeeder
@@ -34,11 +33,19 @@ public static class DDFCWorkflowSeeder
 
         if (existing != null)
         {
+            var paymentStep = existing.Steps.FirstOrDefault(step => step.Name == "Reception \u2013 Payment Confirmation");
+            if (paymentStep != null)
+                paymentStep.Name = "Finance Branch \u2013 Payment Confirmation";
+
+            var oldDraftStep = existing.Steps.FirstOrDefault(step => step.Name == "Architect \u2013 Assign 3D Drafter & Upload Draft");
+            if (oldDraftStep != null)
+                oldDraftStep.Name = "Draft Man";
+
             string[] orderedNames = [
-                "Reception \u2013 Package Selection", "Reception \u2013 Payment Confirmation",
+                "Reception \u2013 Package Selection", "Finance Branch \u2013 Payment Confirmation",
                 "Admin \u2013 Post-Payment Review", "Soil Test", "Principal Architect \u2013 Initial Review",
-                "Architect Department \u2013 House Plan Design", "Architecture Department \u2013 3D Visualization",
-                "Architect \u2013 Assign 3D Drafter & Upload Draft", "Structure Department \u2013 Structural Design",
+                "Architect Department \u2013 House Plan Design", "Draft Man",
+                "Architecture Department \u2013 3D Visualization", "Structure Department \u2013 Structural Design",
                 "MEP Department \u2013 MEP Design", "Principal Architect \u2013 Design Review",
                 "Building Control \u2013 Physical Survey", "DHA Design Head \u2013 Final Approval",
                 "Reception \u2013 Document Delivery"
@@ -48,7 +55,7 @@ public static class DDFCWorkflowSeeder
                 var step = existing.Steps.FirstOrDefault(item => item.Name == orderedNames[index]);
                 if (step != null) step.Order = index + 8;
             }
-            for (var index = 0; index < 3; index++)
+            for (var index = 0; index < 2; index++)
             {
                 var from = existing.Steps.FirstOrDefault(step => step.Name == orderedNames[index])
                     ?? throw new InvalidOperationException($"Workflow step '{orderedNames[index]}' is missing.");
@@ -60,7 +67,103 @@ public static class DDFCWorkflowSeeder
                 else
                     transition.ToStepId = to.Id;
             }
+
+            var admin = existing.Steps.First(step => step.Name == "Admin \u2013 Post-Payment Review");
+            var soil = existing.Steps.First(step => step.Name == "Soil Test");
+            var architect = existing.Steps.First(step => step.Name == "Principal Architect \u2013 Initial Review");
+            var structure = existing.Steps.First(step => step.Name == "Structure Department \u2013 Structural Design");
+            var design = existing.Steps.First(step => step.Name == "Architect Department \u2013 House Plan Design");
+            var draft = existing.Steps.First(step => step.Name == "Draft Man");
+            var threeD = existing.Steps.First(step => step.Name == "Architecture Department \u2013 3D Visualization");
+            var designTransition = await db.StepTransitions.FirstOrDefaultAsync(transition => transition.FromStepId == design.Id &&
+                (transition.ToStepId == threeD.Id || transition.ToStepId == draft.Id))
+                ?? throw new InvalidOperationException("Architect workflow transition is missing.");
+            designTransition.ToStepId = draft.Id;
+            var draftTransition = await db.StepTransitions.FirstOrDefaultAsync(transition => transition.FromStepId == draft.Id && transition.IsDefault)
+                ?? throw new InvalidOperationException("Draft Man workflow transition is missing.");
+            draftTransition.ToStepId = threeD.Id;
+            var threeDTransition = await db.StepTransitions.FirstOrDefaultAsync(transition => transition.FromStepId == threeD.Id && transition.IsDefault)
+                ?? throw new InvalidOperationException("3D workflow transition is missing.");
+            threeDTransition.ToStepId = structure.Id;
+
+            var awaitingThreeD = await db.Requests.Where(request => request.ProcessId == existing.Id &&
+                    request.Status == RequestStatus.InProgress &&
+                    request.Steps.Any(step => step.ProcessStepId == threeD.Id && step.Status == RequestStepStatus.Active) &&
+                    request.Steps.Any(step => step.ProcessStepId == draft.Id && step.Status == RequestStepStatus.Pending))
+                .Include(request => request.Steps).ThenInclude(step => step.Actions).ToListAsync();
+            foreach (var request in awaitingThreeD)
+            {
+                var threeDStep = request.Steps.First(step => step.ProcessStepId == threeD.Id);
+                var draftStep = request.Steps.First(step => step.ProcessStepId == draft.Id);
+                draftStep.Status = RequestStepStatus.Active;
+                draftStep.ParallelGroupId = threeDStep.ParallelGroupId;
+                draftStep.ParallelCompletionMode = threeDStep.ParallelCompletionMode;
+                draftStep.ActionCompletionMode = draft.ActionCompletionMode;
+                draftStep.MinimumActionCount = draft.MinimumActionCount;
+                draftStep.PreviousStepId = threeDStep.PreviousStepId;
+                draftStep.ActivationCount++;
+                threeDStep.Status = RequestStepStatus.Pending;
+                threeDStep.ParallelGroupId = null;
+            }
+            var adminTransitions = await db.StepTransitions.Where(transition => transition.FromStepId == admin.Id &&
+                (transition.ToStepId == soil.Id || transition.ToStepId == architect.Id)).ToListAsync();
+            foreach (var target in new[] { soil, architect })
+            {
+                var transition = adminTransitions.FirstOrDefault(item => item.ToStepId == target.Id);
+                if (transition == null)
+                {
+                    transition = new StepTransition { FromStepId = admin.Id, ToStepId = target.Id };
+                    db.StepTransitions.Add(transition);
+                }
+                transition.IsDefault = true;
+                transition.IsParallel = true;
+                transition.Priority = 0;
+                transition.ParallelCompletionMode = ParallelCompletionMode.Independent;
+            }
+
+            var soilTransition = await db.StepTransitions.FirstOrDefaultAsync(transition =>
+                transition.FromStepId == soil.Id && transition.IsDefault);
+            if (soilTransition == null)
+                db.StepTransitions.Add(new StepTransition { FromStepId = soil.Id, ToStepId = structure.Id, IsDefault = true });
+            else
+                soilTransition.ToStepId = structure.Id;
+
+                var inProgress = await db.Requests.Where(request => request.ProcessId == existing.Id &&
+                    request.Status == RequestStatus.InProgress &&
+                    request.Steps.Any(step => step.ProcessStepId == soil.Id && step.Status == RequestStepStatus.Active) &&
+                    request.Steps.Any(step => step.ProcessStepId == architect.Id && step.Status == RequestStepStatus.Pending))
+                .Include(request => request.Steps).ThenInclude(step => step.Actions)
+                .ToListAsync();
+            foreach (var request in inProgress)
+            {
+                var soilStep = request.Steps.FirstOrDefault(step => step.ProcessStepId == soil.Id);
+                var architectStep = request.Steps.FirstOrDefault(step => step.ProcessStepId == architect.Id);
+                if (soilStep?.Status != RequestStepStatus.Active || architectStep?.Status != RequestStepStatus.Pending)
+                    continue;
+
+                var groupId = Guid.NewGuid();
+                soilStep.ParallelGroupId = groupId;
+                soilStep.ParallelCompletionMode = ParallelCompletionMode.Independent;
+                architectStep.Status = RequestStepStatus.Active;
+                architectStep.ParallelGroupId = groupId;
+                architectStep.ParallelCompletionMode = ParallelCompletionMode.Independent;
+                architectStep.ActionCompletionMode = architect.ActionCompletionMode;
+                architectStep.MinimumActionCount = architect.MinimumActionCount;
+                architectStep.ActivationCount++;
+                foreach (var action in architectStep.Actions)
+                    action.Status = RequestActionStatus.Pending;
+            }
             await db.SaveChangesAsync();
+            var activeDraftIds = await db.RequestSteps.Where(step => step.ProcessStepId == draft.Id &&
+                step.Status == RequestStepStatus.Active && step.Request.Status == RequestStatus.InProgress)
+                .Select(step => step.RequestId).ToListAsync();
+            var ddfc = scope.ServiceProvider.GetRequiredService<DDFCDbContext>();
+            var requestsToUpdate = await ddfc.PossessionRequests.Where(request => request.WorkflowRequestId.HasValue &&
+                activeDraftIds.Contains(request.WorkflowRequestId.Value) &&
+                request.Status == DDFC.Domain.Enums.PossessionRequestStatus.ArchitectureApproved).ToListAsync();
+            foreach (var request in requestsToUpdate)
+                request.Status = DDFC.Domain.Enums.PossessionRequestStatus.ThreeDDraftPending;
+            await ddfc.SaveChangesAsync();
             return existing.Id;
         }
 
@@ -143,10 +246,10 @@ public static class DDFCWorkflowSeeder
         };
         step5.Actions.Add(new StepAction { Name = "Select Design Package", ActionType = ActionType.General });
 
-        // ---- Step 8: Reception – Payment Confirmation ----
+        // ---- Step 9: Finance Branch – Payment Confirmation ----
         var step6 = new ProcessStep
         {
-            Name = "Reception \u2013 Payment Confirmation",
+            Name = "Finance Branch \u2013 Payment Confirmation",
             Order = 9,
             ActionCompletionMode = ActionCompletionMode.All
         };
@@ -190,26 +293,23 @@ public static class DDFCWorkflowSeeder
         step7.Actions.Add(new StepAction { Name = "Upload House Plan", ActionType = ActionType.Upload });
         step7.Actions.Add(new StepAction { Name = "Customer Approves Plan", ActionType = ActionType.Approval });
 
-        // ---- Step 13: Architecture Department – 3D Visualization ----
         var step3D = new ProcessStep
         {
             Name = "Architecture Department \u2013 3D Visualization",
-            Order = 14,
+            Order = 15,
             ActionCompletionMode = ActionCompletionMode.All
         };
         step3D.Actions.Add(new StepAction { Name = "Upload 3D Visualization Files", ActionType = ActionType.Upload });
 
-        // ---- Step 14: Architect – Assign Drafter & Upload 3D Draft ----
         var stepDraft = new ProcessStep
         {
-            Name = "Architect \u2013 Assign 3D Drafter & Upload Draft",
-            Order = 15,
+            Name = "Draft Man",
+            Order = 14,
             ActionCompletionMode = ActionCompletionMode.All
         };
         stepDraft.Actions.Add(new StepAction { Name = "Assign 3D Drafter", ActionType = ActionType.General });
         stepDraft.Actions.Add(new StepAction { Name = "Upload 3D Draft", ActionType = ActionType.Upload });
 
-        // ---- Step 15: Structure Department ----
         var step8 = new ProcessStep
         {
             Name = "Structure Department \u2013 Structural Design",
@@ -309,29 +409,26 @@ public static class DDFCWorkflowSeeder
         var t6_admin = new StepTransition { FromStepId = step6.Id, ToStepId = stepAdmin.Id, IsDefault = true };
 
         // Admin Review â†’ Soil Test
-        var t_admin_soil = new StepTransition { FromStepId = stepAdmin.Id, ToStepId = stepSoilTest.Id, IsDefault = true };
+        var t_admin_soil = new StepTransition { FromStepId = stepAdmin.Id, ToStepId = stepSoilTest.Id, IsDefault = true, IsParallel = true, ParallelCompletionMode = ParallelCompletionMode.Independent };
 
-        // Soil Test â†’ PA Initial Review
-        var t_soil_PA = new StepTransition { FromStepId = stepSoilTest.Id, ToStepId = stepPAInitial.Id, IsDefault = true };
+        var t_admin_PA = new StepTransition { FromStepId = stepAdmin.Id, ToStepId = stepPAInitial.Id, IsDefault = true, IsParallel = true, ParallelCompletionMode = ParallelCompletionMode.Independent };
+        var t_soil_structure = new StepTransition { FromStepId = stepSoilTest.Id, ToStepId = step8.Id, IsDefault = true };
 
         // PA Initial Review â†’ Architecture
         var t6_7 = new StepTransition { FromStepId = stepPAInitial.Id, ToStepId = step7.Id, IsDefault = true };
 
-        // Architecture â†’ 3D Visualization
         var t7_3D = new StepTransition
         {
             FromStepId = step7.Id,
-            ToStepId = step3D.Id,
+            ToStepId = stepDraft.Id,
             Condition = "action=Customer Approves Plan",
             IsDefault = false,
             Priority = 1
         };
 
-        // 3D finalization â†’ Architect drafter assignment/upload
-        var t3D_draft = new StepTransition { FromStepId = step3D.Id, ToStepId = stepDraft.Id, IsDefault = true };
+        var t3D_draft = new StepTransition { FromStepId = stepDraft.Id, ToStepId = step3D.Id, IsDefault = true };
 
-        // Architect draft upload â†’ Structure
-        var tDraft_8 = new StepTransition { FromStepId = stepDraft.Id, ToStepId = step8.Id, IsDefault = true };
+        var tDraft_8 = new StepTransition { FromStepId = step3D.Id, ToStepId = step8.Id, IsDefault = true };
 
         // Structure â†’ MEP
         var t8_9 = new StepTransition { FromStepId = step8.Id, ToStepId = step9.Id, IsDefault = true };
@@ -366,7 +463,7 @@ public static class DDFCWorkflowSeeder
             t1_documents, t_documents_2, t2_3,
             t3_adCoord, t_adCoord_bcd, t_bcd_ddfcAdmin,
             t_ddfcAdmin_5,
-            t5_6, t6_admin, t_admin_soil, t_soil_PA, t6_7,
+            t5_6, t6_admin, t_admin_soil, t_admin_PA, t_soil_structure, t6_7,
             t7_3D, t3D_draft, tDraft_8, t8_9, t9_10,
             t10_11,
             t11_13,

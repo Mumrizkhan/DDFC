@@ -12,16 +12,18 @@ import {
   LogOut,
   Menu,
   X,
-  Bell,
   ChevronDown,
+  FlaskConical,
 } from 'lucide-react';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { staffLogout } from '../store/slices/authSlice';
+import { StaffNotificationBell } from '../components/shared/StaffNotificationBell';
 
 const navItems = [
   { path: '/admin', label: 'Dashboard', icon: LayoutDashboard, end: true },
   { path: '/admin/users', label: 'Users', icon: Users },
   { path: '/admin/departments', label: 'Departments', icon: Building2 },
+  { path: '/admin/laboratories', label: 'Laboratories', icon: FlaskConical },
   { path: '/admin/roles', label: 'Roles & Permissions', icon: ShieldCheck },
   { path: '/admin/packages', label: 'Packages & Pricing', icon: Package },
   { path: '/admin/templates', label: 'Templates', icon: FileText },
@@ -121,9 +123,7 @@ export const AdminLayout: React.FC = () => {
             <Menu size={20} />
           </button>
           <div className="flex-1" />
-          <button className="relative text-gray-500 hover:text-gray-700">
-            <Bell size={20} />
-          </button>
+          <StaffNotificationBell path="/admin/notifications" />
         </header>
 
         {/* Page content */}

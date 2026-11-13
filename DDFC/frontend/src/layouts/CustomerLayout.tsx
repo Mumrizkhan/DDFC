@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { customerLogout } from '../store/slices/authSlice';
+import { fetchNotifications } from '../store/slices/notificationsSlice';
 
 const navItems = [
   { path: '/portal', label: 'My Requests', icon: LayoutDashboard, end: true },
@@ -29,6 +30,12 @@ export const CustomerLayout: React.FC = () => {
   const navigate = useNavigate();
   const customer = useAppSelector((s) => s.auth.customer);
   const unreadCount = useAppSelector((s) => s.notifications.unreadCount);
+
+  useEffect(() => {
+    dispatch(fetchNotifications(undefined));
+    const timer = window.setInterval(() => dispatch(fetchNotifications(undefined)), 30000);
+    return () => window.clearInterval(timer);
+  }, [dispatch]);
 
   const handleLogout = () => {
     dispatch(customerLogout());
@@ -120,6 +127,9 @@ export const CustomerLayout: React.FC = () => {
               >
                 <item.icon size={16} />
                 {item.label}
+                {item.path === '/portal/notifications' && unreadCount > 0 && (
+                  <span className="text-xs font-medium text-red-600">{unreadCount} unread</span>
+                )}
               </NavLink>
             ))}
             <button

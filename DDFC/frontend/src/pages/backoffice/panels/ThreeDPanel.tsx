@@ -10,7 +10,6 @@ import { toast } from 'react-toastify';
 import api from '../../../services/api';
 
 const ACCEPTED_TYPES = '.skp,.jpeg,.jpg,.png';
-const ACCEPTED_MIME  = ['application/octet-stream', 'image/jpeg', 'image/jpg', 'image/png'];
 
 interface UploadedFile {
   fileName: string;
@@ -33,7 +32,9 @@ export const ThreeDPanel: React.FC<Props> = ({ request, requestId }) => {
   const [queue, setQueue]           = useState<UploadedFile[]>([]);
 
   const existingFiles = request.threeDVisualizations ?? [];
-  const isComplete    = request.status !== 'ArchitectureApproved';
+  const isComplete    = request.activeWorkflowStepNames?.length
+    ? !request.activeWorkflowStepNames.some((name) => name.toLowerCase().includes('3d visualization'))
+    : request.status !== 'ArchitectureApproved' && request.status !== 'ThreeDDraftUploaded';
   let permissions = staffUser?.permissions;
   if (typeof permissions === 'string') {
     try { permissions = JSON.parse(permissions); }
@@ -115,8 +116,8 @@ export const ThreeDPanel: React.FC<Props> = ({ request, requestId }) => {
     try {
       await dispatch(threeDComplete(requestId)).unwrap();
       toast.success('3D Visualization step completed');
-    } catch {
-      toast.error('Failed to complete step');
+    } catch (error) {
+      toast.error(typeof error === 'string' ? error : 'Failed to complete step');
     } finally {
       setCompleting(false);
     }

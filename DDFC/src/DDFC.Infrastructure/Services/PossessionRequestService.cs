@@ -345,7 +345,7 @@ public class PossessionRequestService : IPossessionRequestService
     // Workflow step: BCD uploads possession letter (after AD Coordinator)
     // -----------------------------------------------------------------------
     public async Task<PossessionRequest> UploadBcdPossessionLetterAsync(
-        Guid requestId, Guid userId, string possessionLetterFileUrl, string? comments)
+        Guid requestId, Guid userId, string possessionLetterFileUrl, string dhaCopyFileUrl, string? comments)
     {
         var req = await GetRequestAsync(requestId);
 
@@ -354,26 +354,37 @@ public class PossessionRequestService : IPossessionRequestService
 
         var normalizedUrl = possessionLetterFileUrl?.Trim();
         if (string.IsNullOrWhiteSpace(normalizedUrl))
-            throw new InvalidOperationException("Possession letter file URL is required.");
+            throw new InvalidOperationException("Member copy possession letter file URL is required.");
 
-        var exists = await _db.Documents.AnyAsync(d =>
-            d.RequestId == req.Id &&
-            d.DocType == "Possession Letter" &&
-            d.FileUrl == normalizedUrl &&
-            !d.IsArchived);
+        var normalizedDhaUrl = dhaCopyFileUrl?.Trim();
+        if (string.IsNullOrWhiteSpace(normalizedDhaUrl))
+            throw new InvalidOperationException("DHA copy possession letter file URL is required.");
 
-        if (!exists)
+        foreach (var (docType, fileUrl) in new[]
         {
-            _db.Documents.Add(new Document
+            ("Possession Letter", normalizedUrl),
+            ("Possession Letter - DHA Copy", normalizedDhaUrl),
+        })
+        {
+            var exists = await _db.Documents.AnyAsync(d =>
+                d.RequestId == req.Id &&
+                d.DocType == docType &&
+                d.FileUrl == fileUrl &&
+                !d.IsArchived);
+
+            if (!exists)
             {
-                RequestId = req.Id,
-                StepName = "BCD – Upload Possession Letter",
-                DocType = "Possession Letter",
-                FileUrl = normalizedUrl,
-                UploadedBy = userId,
-                UploadedAt = DateTime.UtcNow,
-                Version = 1,
-            });
+                _db.Documents.Add(new Document
+                {
+                    RequestId = req.Id,
+                    StepName = "BCD – Upload Possession Letter",
+                    DocType = docType,
+                    FileUrl = fileUrl,
+                    UploadedBy = userId,
+                    UploadedAt = DateTime.UtcNow,
+                    Version = 1,
+                });
+            }
         }
 
         var fromStatus = req.Status.ToString();
@@ -641,7 +652,8 @@ public class PossessionRequestService : IPossessionRequestService
 
         req.Status = PossessionRequestStatus.PackagePaid;
 
-        await AdvanceWorkflowStepAsync(req, "Reception \u2013 Payment Confirmation",
+        await AdvanceWorkflowStepAsync(req, req.RequestType == RequestType.RevisedPlan || req.RequestType == RequestType.AsBuiltPlan
+            ? "Reception \u2013 Payment Confirmation" : "Finance Branch \u2013 Payment Confirmation",
             "Confirm Payment", userId.ToString(), null);
 
         req.Status = PossessionRequestStatus.AdminReviewPending;
@@ -705,7 +717,8 @@ public class PossessionRequestService : IPossessionRequestService
 
         req.Status = PossessionRequestStatus.PackagePaid;
 
-        await AdvanceWorkflowStepAsync(req, "Reception \u2013 Payment Confirmation",
+        await AdvanceWorkflowStepAsync(req, req.RequestType == RequestType.RevisedPlan || req.RequestType == RequestType.AsBuiltPlan
+            ? "Reception \u2013 Payment Confirmation" : "Finance Branch \u2013 Payment Confirmation",
             "Confirm Payment", userId.ToString(), null);
 
         req.Status = PossessionRequestStatus.AdminReviewPending;
@@ -757,6 +770,7 @@ public class PossessionRequestService : IPossessionRequestService
     public async Task<PossessionRequest> ApprovePlanAsync(Guid requestId, Guid planId, Guid customerId)
     {
         var req = await GetRequestAsync(requestId);
+        await EnsureDraftsmanCompleteAsync(requestId, "Architecture");
         var plan = req.ArchitecturalPlans.FirstOrDefault(p => p.Id == planId)
             ?? throw new InvalidOperationException("Plan not found");
 
@@ -765,14 +779,15 @@ public class PossessionRequestService : IPossessionRequestService
         plan.CustomerApproved = true;
         plan.ApprovedAt = DateTime.UtcNow;
         req.CustomerApprovedPlan = true;
-        req.Status = PossessionRequestStatus.ArchitectureApproved;
+        req.Status = req.RequestType == RequestType.PossessionDesign
+            ? PossessionRequestStatus.ThreeDDraftPending : PossessionRequestStatus.ArchitectureApproved;
 
         await AdvanceWorkflowStepAsync(req,
             "Architect Department \u2013 House Plan Design",
             "Customer Approves Plan", customerId.ToString(), "{\"action\":\"Customer Approves Plan\",\"approved\":true}");
 
         await _db.SaveChangesAsync();
-        await LogHistoryAsync(req.Id, "ArchitectAssigned", "ArchitectureApproved",
+        await LogHistoryAsync(req.Id, "ArchitectAssigned", req.Status.ToString(),
             "ApprovePlan", customerId, null);
         return req;
     }
@@ -783,14 +798,22 @@ public class PossessionRequestService : IPossessionRequestService
     public async Task<PossessionRequest> SubmitInitialSoilTestAsync(Guid requestId, SoilTestDto dto, Guid userId)
     {
         var req = await GetRequestAsync(requestId);
-        if (req.Status != PossessionRequestStatus.PackagePaid)
-            throw new InvalidOperationException("Request must be in PackagePaid status.");
+        if (req.WorkflowRequestId is not { } workflowId ||
+            !(await _workflowEngine.GetRequestAsync(workflowId)).Steps.Any(step =>
+                step.Status == WorkflowEngine.Domain.Enums.RequestStepStatus.Active &&
+                step.ProcessStep.Name == "Soil Test"))
+            throw new InvalidOperationException("The Soil Test step is not active.");
+
+        var schedule = await _db.SoilTestSchedules.Include(item => item.Laboratory)
+            .FirstOrDefaultAsync(item => item.RequestId == requestId)
+            ?? throw new InvalidOperationException("Schedule the soil test before submitting its report.");
+        var fromStatus = req.Status.ToString();
 
         if (req.SoilTestReport != null)
         {
             req.SoilTestReport.ReportFileUrl = dto.ReportFileUrl;
             req.SoilTestReport.TestDate = dto.TestDate;
-            req.SoilTestReport.LabName = dto.LabName;
+            req.SoilTestReport.LabName = schedule.Laboratory.Name;
             req.SoilTestReport.SoilBearingCapacity = dto.SoilBearingCapacity;
             req.SoilTestReport.ResultSummary = dto.ResultSummary;
         }
@@ -800,19 +823,18 @@ public class PossessionRequestService : IPossessionRequestService
             {
                 RequestId = req.Id,
                 TestDate = dto.TestDate,
-                LabName = dto.LabName,
+                LabName = schedule.Laboratory.Name,
                 SoilBearingCapacity = dto.SoilBearingCapacity,
                 ResultSummary = dto.ResultSummary,
                 ReportFileUrl = dto.ReportFileUrl,
                 UploadedBy = userId,
             });
-            req.SoilTestReportUrl = dto.ReportFileUrl;
         }
+        req.SoilTestReportUrl = dto.ReportFileUrl;
 
         await AdvanceWorkflowStepAsync(req, "Soil Test", "Upload Soil Test", userId.ToString(), null);
-        req.Status = PossessionRequestStatus.SoilTestCompleted;
         await _db.SaveChangesAsync();
-        await LogHistoryAsync(req.Id, "PackagePaid", "SoilTestCompleted", "SubmitInitialSoilTest", userId, null);
+        await LogHistoryAsync(req.Id, fromStatus, req.Status.ToString(), "SubmitInitialSoilTest", userId, null);
         return req;
     }
 
@@ -912,6 +934,7 @@ public class PossessionRequestService : IPossessionRequestService
     {
         var req = await GetRequestAsync(requestId);
         await EnsureThreeDStepIsActiveAsync(req);
+        await EnsureDraftsmanCompleteAsync(requestId, "ThreeD");
         if (req.ThreeDVisualizations.Count == 0)
             throw new InvalidOperationException("At least one 3D file must be uploaded before completing this step.");
 
@@ -920,16 +943,19 @@ public class PossessionRequestService : IPossessionRequestService
             "Upload 3D Visualization Files", userId.ToString(), null);
 
         var fromStatus = req.Status.ToString();
-        req.Status = PossessionRequestStatus.ThreeDDraftPending;
+        req.Status = req.RequestType == RequestType.PossessionDesign
+            ? PossessionRequestStatus.ThreeDCompleted : PossessionRequestStatus.ThreeDDraftPending;
         await _db.SaveChangesAsync();
-        await LogHistoryAsync(req.Id, fromStatus, "ThreeDDraftPending", "CompleteThreeD", userId, null);
+        await LogHistoryAsync(req.Id, fromStatus, req.Status.ToString(), "CompleteThreeD", userId, null);
         return req;
     }
 
     private async Task EnsureThreeDStepIsActiveAsync(PossessionRequest request)
     {
-        if (request.Status != PossessionRequestStatus.ArchitectureApproved)
-            throw new InvalidOperationException("Architect must approve the plan before 3D actions are available.");
+        var requiredStatus = request.RequestType == RequestType.PossessionDesign
+            ? PossessionRequestStatus.ThreeDDraftUploaded : PossessionRequestStatus.ArchitectureApproved;
+        if (request.Status != requiredStatus)
+            throw new InvalidOperationException("The preceding design step must be completed before 3D actions are available.");
         if (request.WorkflowRequestId is not { } workflowId) return;
         var workflow = await _workflowEngine.GetRequestAsync(workflowId);
         if (!workflow.Steps.Any(step => step.Status == WorkflowEngine.Domain.Enums.RequestStepStatus.Active &&
@@ -938,13 +964,13 @@ public class PossessionRequestService : IPossessionRequestService
     }
 
     // -----------------------------------------------------------------------
-    // Architect – assign the drafter after 3D visualization is finalized
+    // Architect – assign the drafter
     // -----------------------------------------------------------------------
     public async Task<PossessionRequest> AssignThreeDDrafterAsync(Guid requestId, Guid userId, Guid drafterId)
     {
         var req = await GetRequestAsync(requestId);
         if (req.Status != PossessionRequestStatus.ThreeDDraftPending)
-            throw new InvalidOperationException("3D visualization must be finalized before assigning a drafter.");
+            throw new InvalidOperationException("The request is not awaiting the Draft Man step.");
 
         var assignment = await _db.CadAssignments
             .FirstOrDefaultAsync(a => a.RequestId == req.Id && a.CadType == "ThreeD");
@@ -959,7 +985,7 @@ public class PossessionRequestService : IPossessionRequestService
             var workflow = await _workflowEngine.GetRequestAsync(workflowId);
             var action = workflow.Steps.FirstOrDefault(step =>
                 step.Status == WorkflowEngine.Domain.Enums.RequestStepStatus.Active &&
-                step.ProcessStep.Name == "Architect \u2013 Assign 3D Drafter & Upload Draft")?
+                step.ProcessStep.Name == "Draft Man")?
                 .Actions.FirstOrDefault(item => item.StepAction.Name == "Assign 3D Drafter" &&
                     (item.Status == WorkflowEngine.Domain.Enums.RequestActionStatus.Pending ||
                      item.Status == WorkflowEngine.Domain.Enums.RequestActionStatus.InProgress));
@@ -985,12 +1011,17 @@ public class PossessionRequestService : IPossessionRequestService
             return req;
 
         await AdvanceWorkflowStepAsync(req,
-            "Architect \u2013 Assign 3D Drafter & Upload Draft",
+            "Draft Man",
             "Upload 3D Draft", userId.ToString(), assignment.FileUrl);
         var fromStatus = req.Status.ToString();
         req.Status = PossessionRequestStatus.ThreeDDraftUploaded;
+        if (req.WorkflowRequestId is { } workflowId &&
+            (await _workflowEngine.GetRequestAsync(workflowId)).Steps.Any(step =>
+                step.ProcessStep.Name == "Architecture Department \u2013 3D Visualization" &&
+                step.Status == WorkflowEngine.Domain.Enums.RequestStepStatus.Completed))
+            req.Status = PossessionRequestStatus.ThreeDCompleted;
         await _db.SaveChangesAsync();
-        await LogHistoryAsync(req.Id, fromStatus, "ThreeDDraftUploaded", "Upload3DDraft", userId, null);
+        await LogHistoryAsync(req.Id, fromStatus, req.Status.ToString(), "Upload3DDraft", userId, null);
         return req;
     }
 
@@ -1040,6 +1071,7 @@ public class PossessionRequestService : IPossessionRequestService
         Guid requestId, string reportFileUrl, string? observations, Guid userId)
     {
         var req = await GetRequestAsync(requestId);
+        await EnsureDraftsmanCompleteAsync(requestId, "Structure");
         if (string.IsNullOrWhiteSpace(reportFileUrl))
             throw new InvalidOperationException("A structural report must be attached before submitting the review.");
         var fromStatus = req.Status.ToString();
@@ -1116,7 +1148,10 @@ public class PossessionRequestService : IPossessionRequestService
             .FirstOrDefault(item => !string.IsNullOrWhiteSpace(item.FileUrl));
         var cad = req.CadAssignments.FirstOrDefault(item => item.CadType == "MEP" &&
             item.CompletedAt.HasValue && !string.IsNullOrWhiteSpace(item.FileUrl));
-        if (report == null || cad == null) return req;
+        var draftsman = await _db.DraftsmanTasks.FirstOrDefaultAsync(task => task.RequestId == requestId && task.ParentStep == "MEP");
+        var drawingReady = draftsman == null ? cad != null :
+            draftsman.CompletedAt.HasValue && !string.IsNullOrWhiteSpace(draftsman.FileUrl);
+        if (report == null || !drawingReady) return req;
 
         var fromStatus = req.Status.ToString();
         if (step != null)
@@ -1158,6 +1193,13 @@ public class PossessionRequestService : IPossessionRequestService
             step.Status == WorkflowEngine.Domain.Enums.RequestStepStatus.Active &&
             step.ProcessStep.Name == "MEP Department \u2013 MEP Design")
             ?? throw new InvalidOperationException("The MEP step is not active.");
+    }
+
+    private async Task EnsureDraftsmanCompleteAsync(Guid requestId, string parentStep)
+    {
+        if (await _db.DraftsmanTasks.AnyAsync(task => task.RequestId == requestId &&
+            task.ParentStep == parentStep && task.CompletedAt == null))
+            throw new InvalidOperationException("The assigned Drafts Man child step must be completed first.");
     }
 
     // -----------------------------------------------------------------------

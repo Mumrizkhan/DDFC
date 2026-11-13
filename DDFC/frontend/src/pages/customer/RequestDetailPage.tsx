@@ -33,10 +33,12 @@ export const RequestDetailPage: React.FC = () => {
 
   const req = currentRequest;
 
-  const canApprove = req.status === 'ArchitectureApproved';
   const hasPlan = (req.documents ?? []).some((d) =>
     d.documentType.toLowerCase().includes('plan')
   );
+  const canApprove = req.status === 'ArchitectAssigned' && hasPlan &&
+    (!(req.activeWorkflowStepNames ?? []).length ||
+      (req.activeWorkflowStepNames ?? []).some((name) => name.toLowerCase().includes('architect department')));
 
   const handleApprove = async () => {
     const planDoc = (req.documents ?? []).find((d) => d.documentType.toLowerCase().includes('plan'));

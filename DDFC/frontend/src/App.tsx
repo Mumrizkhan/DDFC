@@ -15,6 +15,7 @@ import { CustomerLoginPage } from './pages/auth/CustomerLoginPage';
 import { AdminDashboardPage } from './pages/admin/AdminDashboardPage';
 import { UserManagementPage } from './pages/admin/UserManagementPage';
 import { DepartmentManagementPage } from './pages/admin/DepartmentManagementPage';
+import { LaboratoryManagementPage } from './pages/admin/LaboratoryManagementPage';
 import { RolesPermissionsPage } from './pages/admin/RolesPermissionsPage';
 import { PackagePricingPage } from './pages/admin/PackagePricingPage';
 import { SystemSettingsPage } from './pages/admin/SystemSettingsPage';
@@ -27,7 +28,9 @@ import { RequestsListPage } from './pages/backoffice/RequestsListPage';
 import { CreateRequestPage } from './pages/backoffice/CreateRequestPage';
 import { TaskDetailPage } from './pages/backoffice/TaskDetailPage';
 import { TasksPage } from './pages/backoffice/TasksPage';
+import { DraftsmanTaskPage } from './pages/backoffice/DraftsmanTaskPage';
 import { AppointmentsPage } from './pages/backoffice/AppointmentsPage';
+import { StaffNotificationsPage } from './pages/backoffice/StaffNotificationsPage';
 
 // Technical Support
 import { TechSupportDashboardPage } from './pages/technical-support/TechSupportDashboardPage';
@@ -68,6 +71,8 @@ function App() {
           <Route path="dashboard" element={<AdminDashboardPage />} />
           <Route path="users" element={<UserManagementPage />} />
           <Route path="departments" element={<DepartmentManagementPage />} />
+          <Route path="laboratories" element={<LaboratoryManagementPage />} />
+          <Route path="notifications" element={<StaffNotificationsPage />} />
           <Route path="roles" element={<RolesPermissionsPage />} />
           <Route path="packages" element={<PackagePricingPage />} />
           <Route path="settings" element={<SystemSettingsPage />} />
@@ -90,7 +95,9 @@ function App() {
           <Route path="requests/create" element={<CreateRequestPage />} />
           <Route path="requests/:requestId" element={<TaskDetailPage />} />
           <Route path="tasks" element={<TasksPage />} />
+          <Route path="draftsman-tasks/:taskId" element={<DraftsmanTaskPage />} />
           <Route path="appointments" element={<AppointmentsPage />} />
+          <Route path="notifications" element={<StaffNotificationsPage />} />
           {/* Technical Support ticket routes */}
           <Route path="tickets" element={<TicketsQueuePage />} />
           <Route path="tickets/:ticketId" element={<TicketSupportDetailPage />} />

@@ -29,7 +29,19 @@ public class NotificationsController : ControllerBase
             .Where(n => n.CustomerId == cid);
         if (unreadOnly == true) q = q.Where(n => !n.IsRead);
         var list = await q.OrderByDescending(n => n.SentAt).ToListAsync();
-        return Ok(list);
+        return Ok(list.Select(notification => new
+        {
+            notificationId = notification.Id,
+            notification.CustomerId,
+            notification.RequestId,
+            notification.Title,
+            notification.MessageBody,
+            notification.RequiresResponse,
+            notification.ResponseText,
+            notification.IsRead,
+            notification.SentAt,
+            channel = notification.Channel.ToString()
+        }));
     }
 
     [HttpPost("{id:guid}/read")]

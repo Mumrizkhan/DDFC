@@ -29,8 +29,8 @@ export const MepPanel: React.FC<Props> = ({ requestId, request }) => {
         mepComplete({ id: requestId, data: { fileUrl: fileUrl.trim(), observations: observations.trim() || undefined } })
       ).unwrap();
       toast.success(updatedRequest.mepCompleted
-        ? 'MEP Review and CAD submitted — sent to Principal Architect Review'
-        : 'MEP Review saved — awaiting MEP CAD');
+        ? 'MEP review and drawing submitted — sent to Principal Architect Review'
+        : 'MEP review saved — awaiting Drafts Man');
       setFileUrl('');
       setObservations('');
     } catch {

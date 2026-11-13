@@ -26,6 +26,7 @@ import { ReceptionPanel } from './panels/ReceptionPanel';
 import { AdminReviewPanel } from './panels/AdminReviewPanel';
 
 import { SoilTestPanel } from './panels/SoilTestPanel';
+import { SoilTestScheduleSection } from './panels/SoilTestScheduleSection';
 import { PrincipalArchitectInitialPanel } from './panels/PrincipalArchitectInitialPanel';
 import { PrincipalArchitectDesignReviewPanel } from './panels/PrincipalArchitectDesignReviewPanel';
 import { BookAppointmentModal } from '../../components/appointments/BookAppointmentModal';
@@ -94,8 +95,8 @@ export const TaskDetailPage: React.FC = () => {
     try {
       await dispatch(approvePlan({ requestId: req.id, planId: planDoc.documentId })).unwrap();
       toast.success('Plan approved');
-    } catch {
-      toast.error('Action failed');
+    } catch (error) {
+      toast.error(typeof error === 'string' ? error : 'Action failed');
     } finally {
       setActionLoading(false);
     }
@@ -189,18 +190,24 @@ export const TaskDetailPage: React.FC = () => {
 
   const renderDepartmentPanel = () => {
     if (staffUser?.roleName === 'Principal Architect' &&
-        req.status === 'ThreeDDraftPending' && stepActive('assign 3d drafter'))
+      req.status === 'ThreeDDraftPending' && stepActive('draft man'))
       return <ArchitecturePanel request={req} requestId={req.id} />;
+    if (activeSteps.some((name) => name.toLowerCase() === 'soil test') &&
+        (dept.toLowerCase().includes('administration') || dept.toLowerCase().includes('ddfc admin') ||
+         ['Admin', 'DDFC Admin', 'Possession Admin'].includes(staffUser?.roleName ?? '')))
+      return <Card title="Soil Test"><SoilTestScheduleSection requestId={req.id} /></Card>;
     if (!dept) return null;
     const d = dept.toLowerCase();
     if (d.includes('3d') || d.includes('three d')) {
-      if (req.status === 'ArchitectureApproved' && stepActive('3d visualization'))
+      if (req.status === 'ThreeDDraftPending' && stepActive('draft man'))
+        return <ArchitecturePanel request={req} requestId={req.id} />;
+      if ((req.status === 'ArchitectureApproved' || req.status === 'ThreeDDraftUploaded') && stepActive('3d visualization'))
         return <ThreeDPanel request={req} requestId={req.id} />;
       return null;
     }
     if (d.includes('architecture')) {
-      if (!stepActive('architect department') && !stepActive('architecture department') && !stepActive('3d department') && !stepActive('assign 3d drafter') && req.status !== 'ArchitectAssigned' && req.status !== 'ThreeDDraftPending') return null;
-      if (req.status === 'ThreeDDraftPending' || stepActive('assign 3d drafter'))
+      if (!stepActive('architect department') && !stepActive('architecture department') && !stepActive('3d department') && !stepActive('draft man') && req.status !== 'ArchitectAssigned' && req.status !== 'ThreeDDraftPending') return null;
+      if (req.status === 'ThreeDDraftPending' || stepActive('draft man'))
         return <ArchitecturePanel request={req} requestId={req.id} />;
       if (req.status === 'ArchitectureApproved' && !stepActive('architect department'))
         return null;
@@ -223,7 +230,7 @@ export const TaskDetailPage: React.FC = () => {
       return <MepPanel requestId={req.id} request={req} />;
     }
     if (d.includes('building control')) {
-      if (req.status === 'PackagePaid' && stepActive('soil test'))
+      if (activeSteps.some((name) => name.toLowerCase() === 'soil test'))
         return <SoilTestPanel request={req} requestId={req.id} />;
       if (req.status === 'AdCoordApproved' && stepActive('bcd'))
         return <BcdPanel requestId={req.id} />;
@@ -238,8 +245,9 @@ export const TaskDetailPage: React.FC = () => {
         return <AdminReviewPanel request={req} requestId={req.id} />;
       if ((s === 'BcdLetterUploaded' || s === 'PossessionIssued') && stepActive('ddfc admin'))
         return <DdfcAdminPanel request={req} requestId={req.id} />;
-      if ((s === 'PossessionLetterSigned' && stepActive('package selection')) ||
-          (s === 'PackageSelected' && stepActive('payment confirmation')))
+        if ((s === 'PossessionLetterSigned' && stepActive('package selection')) ||
+            (s === 'PackageSelected' && stepActive('payment confirmation') &&
+              !activeSteps.some((name) => name.toLowerCase().includes('finance'))))
         return <ReceptionPanel request={req} requestId={req.id} />;
       return null;
     }
@@ -249,6 +257,8 @@ export const TaskDetailPage: React.FC = () => {
     }
     if (d.includes('finance')) {
       if (!stepActive('finance')) return null;
+      if (req.status === 'PackageSelected' && stepActive('payment confirmation'))
+        return <ReceptionPanel request={req} requestId={req.id} />;
       return <FinancePanel request={req} requestId={req.id} />;
     }
     if (d.includes('ad coord')) {
@@ -731,9 +741,9 @@ export const TaskDetailPage: React.FC = () => {
                 </>
               )}
 
-              {dept.toLowerCase().includes('building control') && req.status === 'PackagePaid' && stepActive('soil test') && (
+              {dept.toLowerCase().includes('building control') && activeSteps.some((name) => name.toLowerCase() === 'soil test') && (
                 <p className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
-                  Submit the report in the Soil Test panel above to advance to Principal Architect Initial Review.
+                  Submit the report in the Soil Test panel above before Structure can begin.
                 </p>
               )}
 
@@ -745,9 +755,10 @@ export const TaskDetailPage: React.FC = () => {
                 (dept.toLowerCase().includes('design') && req.status === 'BuildingControlCompleted' && stepActive('dha design head')) ||
                 (dept.toLowerCase().includes('transfer') && req.status === 'DocumentsVerification' && stepActive('transfer')) ||
                 (dept.toLowerCase().includes('finance') && (req.status === 'DocumentsVerification' || req.status === 'TransferApproved') && stepActive('finance')) ||
+                (dept.toLowerCase().includes('finance') && req.status === 'PackageSelected' && stepActive('payment confirmation') && stepActive('finance')) ||
                 (dept.toLowerCase().includes('ad coord') && req.status === 'BothBranchesCleared' && stepActive('ad coordinator')) ||
                 (dept.toLowerCase().includes('building control') && req.status === 'AdCoordApproved' && stepActive('bcd')) ||
-                (dept.toLowerCase().includes('building control') && req.status === 'PackagePaid' && stepActive('soil test')) ||
+                (dept.toLowerCase().includes('building control') && activeSteps.some((name) => name.toLowerCase() === 'soil test')) ||
                 ((dept.toLowerCase().includes('administration') || dept.toLowerCase().includes('ddfc admin') ||
                   staffUser?.roleName === 'Admin' || staffUser?.roleName === 'Possession Admin') &&
                   req.status === 'DocumentsVerification' && stepActive('documents verification')) ||

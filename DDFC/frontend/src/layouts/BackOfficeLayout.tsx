@@ -5,13 +5,13 @@ import {
   ClipboardList,
   CheckSquare,
   Headphones,
-  Bell,
   LogOut,
   Menu,
   CalendarDays,
 } from 'lucide-react';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { staffLogout } from '../store/slices/authSlice';
+import { StaffNotificationBell } from '../components/shared/StaffNotificationBell';
 
 export const BackOfficeLayout: React.FC = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -114,9 +114,7 @@ export const BackOfficeLayout: React.FC = () => {
             <Menu size={20} />
           </button>
           <div className="flex-1" />
-          <button className="text-gray-500 hover:text-gray-700">
-            <Bell size={20} />
-          </button>
+          <StaffNotificationBell path="/backoffice/notifications" />
         </header>
         <main className="flex-1 overflow-y-auto p-6">
           <Outlet />

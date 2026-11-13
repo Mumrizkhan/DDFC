@@ -64,6 +64,12 @@ Once running, access the API at:
 | **Kestrel HTTPS** | http://localhost:5054 | https://localhost:7016 | https://localhost:7016/swagger |
 | **Kestrel HTTP** | http://localhost:5054 | - | http://localhost:5054/swagger |
 
+## SMTP Email
+
+Set `Smtp:Host`, `Smtp:Port`, `Smtp:EnableSsl`, `Smtp:UserName`, `Smtp:From`, and `Smtp:FromName` in `src/DDFC.API/appsettings.json` to match your mail provider. Port 587 with `EnableSsl: true` uses STARTTLS. Implicit TLS on port 465 is not supported by this sender. An unauthenticated relay can leave both the user name and password empty.
+
+Supply the password using the `Smtp__Password` environment variable in the API's hosting environment instead of committing it to the configuration file. Restart the API after changing settings. Until the host and sender address are configured, emails are not sent and attempts report an error.
+
 ## ??? Database Setup
 
 The database is **automatically configured** on first run:

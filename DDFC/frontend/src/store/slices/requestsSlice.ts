@@ -180,9 +180,9 @@ export const requestPlanRevision = createAsyncThunk(
 
 export const bcdUploadPossessionLetter = createAsyncThunk(
   'requests/bcdUploadPossessionLetter',
-  async ({ id, fileUrl, comments }: { id: string; fileUrl: string; comments?: string }, { rejectWithValue }) => {
+  async ({ id, fileUrl, dhaCopyFileUrl, comments }: { id: string; fileUrl: string; dhaCopyFileUrl: string; comments?: string }, { rejectWithValue }) => {
     try {
-      await requestsService.bcdUploadPossessionLetter(id, { fileUrl, comments });
+      await requestsService.bcdUploadPossessionLetter(id, { fileUrl, dhaCopyFileUrl, comments });
       return await requestsService.getById(id);
     } catch (err) {
       return rejectWithValue((err as { message: string }).message);

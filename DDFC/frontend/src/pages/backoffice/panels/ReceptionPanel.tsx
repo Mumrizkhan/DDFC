@@ -120,7 +120,7 @@ export const ReceptionPanel: React.FC<Props> = ({ request, requestId }) => {
   const isAwaitingPayment       = request.status === 'PackageSelected';
   // Challan uploaded by Reception; awaiting Possession Admin approval
   const isPaymentPendingApproval = request.paymentStatus === 'PendingApproval';
-  const canApprovePayment       = ['Admin', 'Possession Admin', 'DDFC Admin'].includes(staffUser?.roleName ?? '');
+  const canApprovePayment       = ['Admin', 'Possession Admin', 'DDFC Admin', 'Finance Officer'].includes(staffUser?.roleName ?? '');
   const isFinalApproved         = request.status === 'FinalApproved';
   // History is sorted ascending by timestamp, so the last entry is the most recent action.
   const latestHistoryEntry      = request.workflowHistory?.[request.workflowHistory.length - 1];
@@ -287,7 +287,7 @@ export const ReceptionPanel: React.FC<Props> = ({ request, requestId }) => {
         id: requestId,
         data: { challanNo: challanNo.trim(), scannedChallanFileUrl: scannedFileUrl.trim() },
       })).unwrap();
-      toast.success('Challan submitted — awaiting Possession Admin approval');
+      toast.success('Challan submitted — awaiting payment approval');
     } catch {
       toast.error('Failed to submit challan');
     } finally {
@@ -320,7 +320,7 @@ export const ReceptionPanel: React.FC<Props> = ({ request, requestId }) => {
   };
 
   return (
-    <Card title={isPackageSelectionReady ? 'Package Selection' : 'Reception Panel'}>
+    <Card title={isPackageSelectionReady ? 'Package Selection' : isAwaitingPayment ? 'Payment Confirmation' : 'Reception Panel'}>
       <div className="space-y-5">
         {request.status === 'DocumentsVerification' && (
           <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 space-y-3">
@@ -659,7 +659,7 @@ export const ReceptionPanel: React.FC<Props> = ({ request, requestId }) => {
                   </Button>
                 ) : (
                   <p className="text-xs text-gray-500 text-center py-1">
-                    Waiting for Possession Admin to approve this payment.
+                    Waiting for payment approval.
                   </p>
                 )}
               </>

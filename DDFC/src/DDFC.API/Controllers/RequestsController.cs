@@ -56,7 +56,11 @@ public class RequestsController : ControllerBase
         {
             var activeSteps = (request.Status == PossessionRequestStatus.DocumentsVerification
                 || request.Status == PossessionRequestStatus.PackagePaid
+                || request.Status == PossessionRequestStatus.ArchitectAssigned
                 || request.Status == PossessionRequestStatus.ArchitectureApproved
+                || request.Status == PossessionRequestStatus.ThreeDCompleted
+                || request.Status == PossessionRequestStatus.ThreeDDraftPending
+                || request.Status == PossessionRequestStatus.ThreeDDraftUploaded
                 || request.Status == PossessionRequestStatus.PrincipalArchitectApproved)
                 && request.WorkflowRequestId.HasValue
                 ? await _svc.GetActiveWorkflowStepNamesAsync(request.Id)
@@ -221,7 +225,7 @@ public class RequestsController : ControllerBase
     {
         try
         {
-            await _svc.UploadBcdPossessionLetterAsync(id, GetCurrentUserId(), dto.FileUrl, dto.Comments);
+            await _svc.UploadBcdPossessionLetterAsync(id, GetCurrentUserId(), dto.FileUrl, dto.DhaCopyFileUrl, dto.Comments);
             return NoContent();
         }
         catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
@@ -797,7 +801,7 @@ public class RequestsController : ControllerBase
 
         // Replace existing assignment of same cadType if present
         if (dto.CadType == "ArchitectDraft" && req.Status != PossessionRequestStatus.ThreeDDraftPending)
-            return BadRequest(new { message = "Architect draft assignments are only available at step 15." });
+            return BadRequest(new { message = "Draft assignments are only available at the Draft Man step." });
 
         if (req.Status == PossessionRequestStatus.ThreeDDraftPending &&
             (dto.CadType == "ThreeD" || dto.CadType == "ArchitectDraft"))
@@ -873,7 +877,7 @@ public class RequestsController : ControllerBase
             return BadRequest(new { message = $"No CAD operator has been assigned for {normalised} yet." });
 
         if (normalised == "ArchitectDraft" && req.Status != PossessionRequestStatus.ThreeDDraftPending)
-            return BadRequest(new { message = "Architect draft uploads are only available at step 15." });
+            return BadRequest(new { message = "Draft uploads are only available at the Draft Man step." });
         if (string.IsNullOrWhiteSpace(dto.FileUrl))
             return BadRequest(new { message = "A file must be attached before submission." });
 
@@ -888,7 +892,7 @@ public class RequestsController : ControllerBase
             _db.Documents.Add(new Document
             {
                 RequestId = req.Id,
-                StepName = "Architect \u2013 Assign 3D Drafter & Upload Draft",
+                StepName = "Draft Man",
                 DocType = normalised == "ThreeD" ? "Drafter Draft" : "Architect Draft",
                 FileUrl = dto.FileUrl,
                 UploadedBy = GetCurrentUserId(),
@@ -1168,8 +1172,12 @@ public class RequestsController : ControllerBase
         // Staff approve on customer's behalf — use the request's actual customerId
         var req = await _db.PossessionRequests.FirstOrDefaultAsync(r => r.Id == id);
         if (req is null) return NotFound();
-        await _svc.ApprovePlanAsync(id, planId, req.CustomerId);
-        return NoContent();
+        try
+        {
+            await _svc.ApprovePlanAsync(id, planId, req.CustomerId);
+            return NoContent();
+        }
+        catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
     }
 
     [HttpPost("{id:guid}/plan/{planId:guid}/revision")]
@@ -1237,8 +1245,12 @@ public class RequestsController : ControllerBase
     [Authorize(Policy = "CanCompleteStructure")]
     public async Task<IActionResult> CompleteStructure(Guid id, [FromBody] ReportDto dto)
     {
-        await _svc.CompleteStructureAsync(id, dto.FileUrl, dto.Observations, GetCurrentUserId());
-        return NoContent();
+        try
+        {
+            await _svc.CompleteStructureAsync(id, dto.FileUrl, dto.Observations, GetCurrentUserId());
+            return NoContent();
+        }
+        catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
     }
 
     [HttpPost("{id:guid}/mep/complete")]
@@ -1643,6 +1655,7 @@ public class UploadPlanDto
 public class UploadPossessionLetterDto
 {
     public string FileUrl { get; set; } = string.Empty;
+    public string DhaCopyFileUrl { get; set; } = string.Empty;
     public string? Comments { get; set; }
 }
 

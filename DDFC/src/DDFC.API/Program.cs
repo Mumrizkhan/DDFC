@@ -383,10 +383,13 @@ app.UseHttpsRedirection();
 // Serve uploaded files from the /uploads path
 var uploadsDir = Path.Combine(app.Environment.ContentRootPath, "uploads");
 Directory.CreateDirectory(uploadsDir);
+var uploadContentTypes = new Microsoft.AspNetCore.StaticFiles.FileExtensionContentTypeProvider();
+uploadContentTypes.Mappings[".dwg"] = "application/acad";
 app.UseStaticFiles(new StaticFileOptions
 {
     FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(uploadsDir),
-    RequestPath  = "/uploads"
+    RequestPath  = "/uploads",
+    ContentTypeProvider = uploadContentTypes
 });
 
 app.UseAuthentication();

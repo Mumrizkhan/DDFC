@@ -49,13 +49,13 @@ export const RequestsListPage: React.FC = () => {
   const roleStatusFilter: string[] | undefined = isTransferOfficer
     ? ['DocumentsVerification', 'FinanceApproved']
     : isFinanceOfficer
-    ? ['DocumentsVerification', 'TransferApproved']
+    ? ['DocumentsVerification', 'TransferApproved', 'PackageSelected']
     : isAdCoordinator
     ? ['BothBranchesCleared']
     : isBuildingControlOfficer
-    ? ['AdCoordApproved', 'PackagePaid', 'PrincipalArchitectApproved']
+    ? ['AdCoordApproved', 'PackagePaid', 'ArchitectAssigned', 'ArchitectureApproved', 'ThreeDCompleted', 'ThreeDDraftPending', 'ThreeDDraftUploaded', 'PrincipalArchitectApproved']
     : isThreeDUser
-    ? ['ArchitectureApproved']
+    ? ['ArchitectureApproved', 'ThreeDDraftPending', 'ThreeDDraftUploaded']
     : undefined;
 
   const [statusFilter, setStatusFilter] = useState('');
@@ -88,6 +88,12 @@ export const RequestsListPage: React.FC = () => {
 
   // ── Data filtering ────────────────────────────────────────────────────────────
   const filtered = requests.filter((r) => {
+    if (isFinanceOfficer && r.status === 'PackageSelected' &&
+        r.requestType && r.requestType !== 'PossessionDesign') return false;
+    if (isThreeDUser && !(r.activeWorkflowStepNames ?? []).some((name) =>
+      /draft man|3d visualization/i.test(name))) return false;
+    if (isBuildingControlOfficer && ['PackagePaid', 'ArchitectAssigned', 'ArchitectureApproved', 'ThreeDCompleted', 'ThreeDDraftPending', 'ThreeDDraftUploaded'].includes(r.status) &&
+      !(r.activeWorkflowStepNames ?? []).some((name) => name.toLowerCase() === 'soil test')) return false;
     if (!search) return true;
     const s = search.toLowerCase();
     return (

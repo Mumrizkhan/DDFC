@@ -19,7 +19,7 @@ public interface IPossessionRequestService
     Task<PossessionRequest> ApproveAdCoordAsync(Guid requestId, Guid userId, string? comments);
     Task<PossessionRequest> RejectAdCoordAsync(Guid requestId, Guid userId, string? comments);
     /// <summary>BCD uploads the possession letter after AD Coordinator approval.</summary>
-    Task<PossessionRequest> UploadBcdPossessionLetterAsync(Guid requestId, Guid userId, string possessionLetterFileUrl, string? comments);
+    Task<PossessionRequest> UploadBcdPossessionLetterAsync(Guid requestId, Guid userId, string possessionLetterFileUrl, string dhaCopyFileUrl, string? comments);
     Task<PossessionRequest> DdfcAdminSignAsync(Guid requestId, Guid userId, IssueCertDto dto);
     Task<PossessionCertificate?> GetPossessionCertificateAsync(Guid requestId);
     Task<PossessionRequest> SelectPackageAsync(Guid requestId, Guid packageId, Guid? interiorDesignPackageId, Guid? supervisionPackageId, Guid userId);

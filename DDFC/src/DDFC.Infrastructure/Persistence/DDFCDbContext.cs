@@ -28,6 +28,9 @@ public class DDFCDbContext : IdentityDbContext<User, Role, Guid>
     public DbSet<MEPReport> MEPReports { get; set; } = null!;
     public DbSet<SurveyObservation> SurveyObservations { get; set; } = null!;
     public DbSet<SoilTestReport> SoilTestReports { get; set; } = null!;
+    public DbSet<Laboratory> Laboratories { get; set; } = null!;
+    public DbSet<SoilTestSchedule> SoilTestSchedules { get; set; } = null!;
+    public DbSet<StaffNotification> StaffNotifications { get; set; } = null!;
     public DbSet<Document> Documents { get; set; } = null!;
     public DbSet<Template> Templates { get; set; } = null!;
     public DbSet<PossessionCertificate> PossessionCertificates { get; set; } = null!;
@@ -37,6 +40,7 @@ public class DDFCDbContext : IdentityDbContext<User, Role, Guid>
     public DbSet<PlotAnnexation> PlotAnnexations { get; set; } = null!;
     public DbSet<PlotMerging> PlotMergings { get; set; } = null!;
     public DbSet<CadAssignment> CadAssignments { get; set; } = null!;
+    public DbSet<DraftsmanTask> DraftsmanTasks { get; set; } = null!;
 
     // Interface support entities
     public DbSet<TaskAssignment> TaskAssignments { get; set; } = null!;
@@ -67,6 +71,25 @@ public class DDFCDbContext : IdentityDbContext<User, Role, Guid>
         modelBuilder.Entity<PossessionRequest>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<User>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<Department>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<Laboratory>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<SoilTestSchedule>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<StaffNotification>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<DraftsmanTask>().HasQueryFilter(e => !e.IsDeleted);
+
+        modelBuilder.Entity<DraftsmanTask>().Property(task => task.ParentStep).HasMaxLength(100);
+        modelBuilder.Entity<DraftsmanTask>().HasIndex(task => new { task.RequestId, task.ParentStep }).IsUnique();
+        modelBuilder.Entity<DraftsmanTask>().HasOne(task => task.Request).WithMany()
+            .HasForeignKey(task => task.RequestId).OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<DraftsmanTask>().HasOne(task => task.AssignedToUser).WithMany()
+            .HasForeignKey(task => task.AssignedToUserId).OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<SoilTestSchedule>().HasIndex(schedule => schedule.RequestId).IsUnique();
+        modelBuilder.Entity<SoilTestSchedule>().HasOne(schedule => schedule.Laboratory).WithMany()
+            .HasForeignKey(schedule => schedule.LaboratoryId).OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<StaffNotification>().HasOne(notification => notification.User).WithMany()
+            .HasForeignKey(notification => notification.UserId).OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<StaffNotification>().HasOne(notification => notification.Request).WithMany()
+            .HasForeignKey(notification => notification.RequestId).OnDelete(DeleteBehavior.Restrict);
 
         // PossessionRequest indexes
         modelBuilder.Entity<PossessionRequest>()

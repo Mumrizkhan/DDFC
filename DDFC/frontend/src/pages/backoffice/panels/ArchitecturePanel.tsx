@@ -46,7 +46,7 @@ export const ArchitecturePanel: React.FC<Props> = ({ request, requestId }) => {
 
   if (request.status === 'ThreeDDraftPending') {
     return (
-      <Card title="Architect Draft">
+      <Card title="Draft Man">
         <div className="space-y-5">
           <CadSection
             cadType="ThreeD"
@@ -115,6 +115,8 @@ export const ArchitecturePanel: React.FC<Props> = ({ request, requestId }) => {
             <FileUploadButton
               label="Plan File"
               required
+              accept=".pdf,.jpg,.jpeg,.png,.dwg"
+              uploadText="Click to upload PDF / JPG / PNG / DWG"
               value={fileUrl}
               onUploaded={(url) => setFileUrl(url)}
             />

@@ -48,7 +48,8 @@ public class WorkflowEngineService : IWorkflowEngine
 
         // Check if all steps in any parallel group are completed
         var activeParallelGroups = request.Steps
-            .Where(s => s.ParallelGroupId.HasValue && s.Status == RequestStepStatus.Active)
+            .Where(s => s.ParallelGroupId.HasValue && s.Status == RequestStepStatus.Active &&
+                s.ParallelCompletionMode != ParallelCompletionMode.Independent)
             .Select(s => s.ParallelGroupId.Value)
             .Distinct()
             .ToList();
@@ -298,7 +299,11 @@ public class WorkflowEngineService : IWorkflowEngine
             step.RequestId);
 
         // Check if this was part of a parallel group
-        if (step.ParallelGroupId.HasValue)
+        if (step.ParallelGroupId.HasValue && step.ParallelCompletionMode == ParallelCompletionMode.Independent)
+        {
+            await AdvanceIndependentBranchAsync(step);
+        }
+        else if (step.ParallelGroupId.HasValue)
         {
             await TryCompleteParallelGroupAsync(step.Request, step.ParallelGroupId.Value);
         }
@@ -346,7 +351,11 @@ public class WorkflowEngineService : IWorkflowEngine
             step.Id, step.RequestId);
 
         // Check if this was part of a parallel group
-        if (step.ParallelGroupId.HasValue)
+        if (step.ParallelGroupId.HasValue && step.ParallelCompletionMode == ParallelCompletionMode.Independent)
+        {
+            await AdvanceIndependentBranchAsync(step);
+        }
+        else if (step.ParallelGroupId.HasValue)
         {
             await TryCompleteParallelGroupAsync(step.Request, step.ParallelGroupId.Value);
         }
@@ -474,7 +483,11 @@ public class WorkflowEngineService : IWorkflowEngine
             step.RequestId);
 
         // Check if this was part of a parallel group
-        if (step.ParallelGroupId.HasValue)
+        if (step.ParallelGroupId.HasValue && step.ParallelCompletionMode == ParallelCompletionMode.Independent)
+        {
+            await AdvanceIndependentBranchAsync(step);
+        }
+        else if (step.ParallelGroupId.HasValue)
         {
             await TryCompleteParallelGroupAsync(step.Request, step.ParallelGroupId.Value);
         }
@@ -483,6 +496,50 @@ public class WorkflowEngineService : IWorkflowEngine
             // activate next step
             await ActivateNextStepAsync(step.Request);
         }
+    }
+
+    private async Task AdvanceIndependentBranchAsync(RequestStep completedStep)
+    {
+        var request = await _repo.GetRequestWithDetailsAsync(completedStep.RequestId);
+        var source = request.Steps.First(step => step.Id == completedStep.Id);
+        var pendingSources = new Queue<RequestStep>();
+        var visited = new HashSet<Guid>();
+        pendingSources.Enqueue(source);
+
+        while (pendingSources.TryDequeue(out var current))
+        {
+            if (!visited.Add(current.Id)) continue;
+            var nextStepIds = TransitionEvaluator.EvaluateNextSteps(current.ProcessStep.TransitionsFrom, current.Data);
+            foreach (var nextStepId in nextStepIds)
+            {
+                var next = request.Steps.FirstOrDefault(step => step.ProcessStepId == nextStepId);
+                if (next == null) continue;
+
+                var predecessors = request.Steps.Where(step => step.ProcessStep.TransitionsFrom.Any(transition =>
+                    !transition.IsBackwardTransition && transition.ToStepId == nextStepId)).ToList();
+                if (predecessors.Any(step => step.Status != RequestStepStatus.Completed)) continue;
+                if (predecessors.Count > 1 && request.Steps.Any(step => step.ParallelGroupId == source.ParallelGroupId &&
+                    step.Status == RequestStepStatus.Active)) continue;
+                if (next.Status == RequestStepStatus.Completed)
+                {
+                    pendingSources.Enqueue(next);
+                    continue;
+                }
+                if (next.Status != RequestStepStatus.Pending) continue;
+
+                next.Status = RequestStepStatus.Active;
+                next.ParallelGroupId = predecessors.Count > 1 ? null : source.ParallelGroupId;
+                next.ParallelCompletionMode = ParallelCompletionMode.Independent;
+                next.ActivationCount++;
+                next.PreviousStepId = current.Id;
+                next.ActionCompletionMode = next.ProcessStep.ActionCompletionMode;
+                next.MinimumActionCount = next.ProcessStep.MinimumActionCount;
+                foreach (var action in next.Actions)
+                    action.Status = RequestActionStatus.Pending;
+            }
+        }
+
+        await _repo.SaveChangesAsync();
     }
 
     private async Task TryCompleteParallelGroupAsync(Request request, Guid parallelGroupId)

@@ -19,8 +19,8 @@ const DDFC_STEPS: StepDef[] = [
   { status: 'SoilTestCompleted',         label: 'Soil Test' },
   { status: 'ArchitectAssigned',         label: 'Principal Architect' },
   { status: 'ArchitectureApproved',      label: 'Architect' },
+  { status: 'ThreeDDraftPending',        label: 'Draft Man' },
   { status: 'ThreeDCompleted',           label: '3D' },
-  { status: 'ThreeDDraftPending',        label: 'Architect Draft' },
   { status: 'StructureCompleted',        label: 'Structure' },
   { status: 'MEPCompleted',              label: 'MEP' },
   { status: 'PrincipalArchitectApproved', label: 'Principal Architect Review' },
@@ -57,12 +57,14 @@ const DDFC_WE_MAP: Record<string, RequestStatus> = {
   'BCD \u2013 Upload Possession Letter':             'BcdLetterUploaded',
   'DDFC Admin \u2013 Sign Possession Letter':        'PossessionLetterSigned',
   'Reception \u2013 Package Selection':              'PackageSelected',
+  'Finance Branch \u2013 Payment Confirmation':      'PackagePaid',
   'Reception \u2013 Payment Confirmation':           'PackagePaid',
   'Admin \u2013 Post-Payment Review':                'AdminReviewPending',
   'Soil Test':                                       'SoilTestCompleted',
   'Principal Architect \u2013 Initial Review':       'ArchitectAssigned',
   'Architect Department \u2013 House Plan Design':   'ArchitectureApproved',
   'Architecture Department \u2013 3D Visualization': 'ThreeDCompleted',
+  'Draft Man':                                       'ThreeDDraftPending',
   'Architect \u2013 Assign 3D Drafter & Upload Draft': 'ThreeDDraftPending',
   'Structure Department \u2013 Structural Design':   'StructureCompleted',
   'MEP Department \u2013 MEP Design':                'MEPCompleted',
@@ -123,9 +125,13 @@ export const WorkflowStepper: React.FC<WorkflowStepperProps> = ({
   const hasWeData = weActiveIndices.size > 0;
   // BothBranchesCleared is not a stepper step; map it to AD Coordinator (in progress)
   const resolvedStatus = currentStatus === 'BothBranchesCleared' ? 'AdCoordApproved'
-    : currentStatus === 'PrincipalArchitectReviewPending' ? 'PrincipalArchitectApproved' : currentStatus;
+    : currentStatus === 'PrincipalArchitectReviewPending' ? 'PrincipalArchitectApproved'
+    : currentStatus === 'ThreeDDraftUploaded' ? 'ThreeDCompleted' : currentStatus;
   const fallbackIdx = STATUS_ORDER.indexOf(resolvedStatus);
   const minActiveIdx = hasWeData ? Math.min(...weActiveIndices) : fallbackIdx;
+  const maxActiveIdx = hasWeData ? Math.max(...weActiveIndices) : fallbackIdx;
+  const completedThroughIdx = currentStatus === 'ThreeDCompleted'
+    ? STATUS_ORDER.indexOf('StructureCompleted') : maxActiveIdx;
 
   // 1-based step number, clamped
   const currentStepNum = Math.min(Math.max(minActiveIdx + 1, 1), TOTAL);
@@ -178,7 +184,7 @@ export const WorkflowStepper: React.FC<WorkflowStepperProps> = ({
           <ol className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-1 py-2">
             {WORKFLOW_STEPS.map((step, idx) => {
               const isActive  = hasWeData ? weActiveIndices.has(idx) : idx === fallbackIdx;
-              const isDone    = idx < minActiveIdx;
+              const isDone    = !isActive && idx < Math.max(maxActiveIdx, completedThroughIdx);
               const isPending = !isDone && !isActive;
 
               return (
